@@ -1,0 +1,20 @@
+.{
+    .name = .basic26,
+    .version = "0.0.0",
+    .fingerprint = 0xd2eac84aef054c5c,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .translate_c = .{
+            .url = "git+https://codeberg.org/ziglang/translate-c?ref=zig-0.16.x#6fe0ffc4549f15c5f2d9432c2b4460ba90ff85ac",
+            .hash = "translate_c-1.0.0-Q_BUWo_5BgD4flHdUhA31zOz0XvZk9k7lQv1ouzyNXj2",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        // For example...
+        //"LICENSE",
+        //"README.md",
+    },
+}
