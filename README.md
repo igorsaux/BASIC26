@@ -274,65 +274,65 @@ Computes Fibonacci numbers using a WHILE loop. Shows how to set variables from C
 MacBook Air M3:
 
 ```
-Run  1: 1655 ns/iter
-Run  2: 1391 ns/iter
-Run  3: 1329 ns/iter
-Run  4: 1372 ns/iter
-Run  5: 1342 ns/iter
-Run  6: 1318 ns/iter
-Run  7: 1354 ns/iter
-Run  8: 1344 ns/iter
-Run  9: 1384 ns/iter
-Run 10: 1364 ns/iter
+Run  1: 1872 ns/iter
+Run  2: 1546 ns/iter
+Run  3: 1398 ns/iter
+Run  4: 1286 ns/iter
+Run  5: 1235 ns/iter
+Run  6: 1205 ns/iter
+Run  7: 1192 ns/iter
+Run  8: 1236 ns/iter
+Run  9: 1231 ns/iter
+Run 10: 1239 ns/iter
 
 --- Results (ns/iter) ---
-Mean:     1385 ns
-Median:   1364 ns
-Min:      1318 ns
-Max:      1655 ns
-Std Dev:  92.6 ns (6.7%)
-P95:      1655 ns
-P99:      1655 ns
+Mean:     1344 ns
+Median:   1239 ns
+Min:      1192 ns
+Max:      1872 ns
+Std Dev:  203.9 ns (15.2%)
+P95:      1872 ns
+P99:      1872 ns
 
 --- Detailed per-iteration analysis (last run) ---
-Mean:     1294 ns
-Median:   1292 ns
-Min:      1166 ns
-Max:      7458 ns
-Std Dev:  131.7 ns (10.2%)
-P95:      1334 ns
-P99:      1542 ns
+Mean:     1215 ns
+Median:   1208 ns
+Min:      1083 ns
+Max:      8750 ns
+Std Dev:  155.6 ns (12.8%)
+P95:      1291 ns
+P99:      1459 ns
 ```
 
 Intel Core i5-11600K:
 
 ```
-Run  1: 4723 ns/iter
-Run  2: 4586 ns/iter
-Run  3: 4643 ns/iter
-Run  4: 4640 ns/iter
-Run  5: 4636 ns/iter
-Run  6: 4592 ns/iter
-Run  7: 4640 ns/iter
-Run  8: 4639 ns/iter
-Run  9: 4599 ns/iter
-Run 10: 4664 ns/iter
+Run  1: 1837 ns/iter
+Run  2: 1738 ns/iter
+Run  3: 1739 ns/iter
+Run  4: 1709 ns/iter
+Run  5: 1722 ns/iter
+Run  6: 1724 ns/iter
+Run  7: 1752 ns/iter
+Run  8: 1735 ns/iter
+Run  9: 1730 ns/iter
+Run 10: 1747 ns/iter
 
 --- Results (ns/iter) ---
-Mean:     4636 ns
-Median:   4640 ns
-Min:      4586 ns
-Max:      4723 ns
-Std Dev:  37.7 ns (0.8%)
-P95:      4723 ns
-P99:      4723 ns
+Mean:     1743 ns
+Median:   1738 ns
+Min:      1709 ns
+Max:      1837 ns
+Std Dev:  33.5 ns (1.9%)
+P95:      1837 ns
+P99:      1837 ns
 
 --- Detailed per-iteration analysis (last run) ---
-Mean:     4523 ns
-Median:   4500 ns
-Min:      4300 ns
-Max:      37700 ns
-Std Dev:  463.9 ns (10.3%)
-P95:      4800 ns
-P99:      4901 ns
+Mean:     1681 ns
+Median:   1700 ns
+Min:      1600 ns
+Max:      14300 ns
+Std Dev:  206.5 ns (12.3%)
+P95:      1800 ns
+P99:      1800 ns
 ```

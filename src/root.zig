@@ -48,6 +48,12 @@ const Value = struct {
             .type = c.BASIC26_VALUE_TYPE_NULL,
         };
     }
+
+    pub inline fn fromUndefined() c.basic26_Value {
+        return .{
+            .type = c.BASIC26_VALUE_TYPE_FORCE_32BIT,
+        };
+    }
 };
 
 const UserAllocator = struct {
@@ -1025,7 +1031,7 @@ const State = struct {
     ip: usize = 0,
     sp: usize = 0,
     stack: [c.BASIC26_STACK_CAPACITY]c.basic26_Value = undefined,
-    vars: std.ArrayList(?c.basic26_Value) = .empty,
+    vars: std.ArrayList(c.basic26_Value) = .empty,
 
     pub inline fn init(vm: *Vm) State {
         return .{ .vm = vm };
@@ -1039,7 +1045,7 @@ const State = struct {
         this: *State,
         allocator: std.mem.Allocator,
         id: c.basic26_SymbolId,
-        value: ?c.basic26_Value,
+        value: c.basic26_Value,
         create: bool,
     ) error{OutOfMemory}!bool {
         if (id >= this.vars.items.len) {
@@ -1047,10 +1053,10 @@ const State = struct {
                 return false;
             }
 
-            try this.vars.appendNTimes(allocator, null, id + 1 - this.vars.items.len);
+            try this.vars.appendNTimes(allocator, Value.fromUndefined(), id + 1 - this.vars.items.len);
         }
 
-        if (!create and this.vars.items[id] == null) {
+        if (!create and this.vars.items[id].type == c.BASIC26_VALUE_TYPE_FORCE_32BIT) {
             return false;
         }
 
@@ -1061,6 +1067,10 @@ const State = struct {
 
     pub inline fn getVar(this: *const State, id: c.basic26_SymbolId) ?c.basic26_Value {
         if (id >= this.vars.items.len) {
+            return null;
+        }
+
+        if (this.vars.items[id].type == c.BASIC26_VALUE_TYPE_FORCE_32BIT) {
             return null;
         }
 
