@@ -543,14 +543,21 @@ extern "C"
     /**
      * @brief Execution limits for a script run.
      *
-     * Both fields default to 0 (unlimited). Set one or both to enforce a cap
-     * on resource consumption during `basic26_Vm_run()`. If any limit is
-     * exceeded, the run returns `BASIC26_RESULT_OUT_OF_LIMITS`.
+     * `max_ops` and `max_time_ns` default to 0 (unlimited). Set one or both to
+     * enforce a cap on resource consumption during `basic26_Vm_run()`. If any
+     * limit is exceeded, the run returns `BASIC26_RESULT_OUT_OF_LIMITS`.
+     *
+     * When `max_time_ns` is set, the VM checks elapsed wall-clock time every
+     * `time_check_interval` opcodes rather than on every single opcode, reducing
+     * the overhead of frequent system clock queries. Time is always checked
+     * immediately after a CALL opcode completes, regardless of the interval, so
+     * that long-running native callbacks cannot bypass the time limit.
      */
     typedef struct basic26_RunLimits
     {
-        size_t max_ops;       /**< [in] Maximum opcodes to execute. 0 = unlimited. */
-        uint64_t max_time_ns; /**< [in] Maximum execution time in nanoseconds. 0 = unlimited. */
+        size_t max_ops;             /**< [in] Maximum opcodes to execute. 0 = unlimited. */
+        uint64_t max_time_ns;       /**< [in] Maximum execution time in nanoseconds. 0 = unlimited. */
+        size_t time_check_interval; /**< [in] Opcodes between elapsed-time checks. 0 = every opcode. */
     } basic26_RunLimits;
 
     /**

@@ -277,7 +277,7 @@ const Vm = struct {
         this.function_callbacks.deinit(alloc);
     }
 
-    pub fn execute(this: *Vm, state: *State, script: *const Script, userdata: ?*anyopaque, op: Op) ExecuteResult {
+    pub inline fn execute(this: *Vm, state: *State, script: *const Script, userdata: ?*anyopaque, op: Op) ExecuteResult {
         const alloc = this.allocator.allocator();
 
         switch (op) {
@@ -892,70 +892,134 @@ export fn basic26_RunOptions_zeroed() callconv(.c) c.basic26_RunOptions {
     return .{};
 }
 
+fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type {
+    return struct {
+        fn run(
+            vm: *Vm,
+            state: *State,
+            script: *const Script,
+            limits: *const c.basic26_RunLimits,
+            userdata: ?*anyopaque,
+            error_out: ?*c.basic26_RuntimeErrorInfo,
+        ) c.basic26_Result {
+            if (state.ip >= script.ops.items.len) {
+                return c.BASIC26_RESULT_OK;
+            }
+
+            const start_time: std.Io.Timestamp = if (comptime check_time_limit)
+                std.Io.Timestamp.now(vm.io.io(), .real)
+            else
+                undefined;
+
+            var ops_executed: usize = 0;
+            var ops_since_time_check: usize = if (check_time_limit) limits.time_check_interval else 0;
+
+            while (state.ip < script.ops.items.len) {
+                if (comptime check_ops_limit) {
+                    if (limits.max_ops > 0 and ops_executed >= limits.max_ops) {
+                        return c.BASIC26_RESULT_OUT_OF_LIMITS;
+                    }
+                }
+
+                if (comptime check_time_limit) {
+                    const interval = limits.time_check_interval;
+
+                    if (interval == 0 or ops_since_time_check >= interval) {
+                        const current_time = std.Io.Timestamp.now(vm.io.io(), .real);
+                        const elapsed = current_time.nanoseconds - start_time.nanoseconds;
+
+                        if (elapsed >= limits.max_time_ns) {
+                            return c.BASIC26_RESULT_OUT_OF_LIMITS;
+                        }
+
+                        ops_since_time_check = 0;
+                    }
+                }
+
+                const op = script.ops.items[state.ip];
+                const prev_ip = state.ip;
+                state.ip += 1;
+                ops_executed += 1;
+
+                if (check_time_limit) {
+                    ops_since_time_check += 1;
+                }
+
+                const is_call_op: bool = switch (op) {
+                    .call => true,
+                    else => false,
+                };
+
+                switch (vm.execute(state, script, userdata, op)) {
+                    .ok => {},
+                    .yield => return c.BASIC26_RESULT_YIELDED,
+                    .err => |err| {
+                        if (error_out) |err_out| {
+                            err_out.ip = prev_ip;
+                            err_out.code = switch (err) {
+                                ExecuteError.DivisionByZero => c.BASIC26_RUNTIME_ERROR_DIVISION_BY_ZERO,
+                                ExecuteError.TypeMismatch => c.BASIC26_RUNTIME_ERROR_TYPE_MISMATCH,
+                                ExecuteError.StackUnderflow => c.BASIC26_RUNTIME_ERROR_STACK_UNDERFLOW,
+                                ExecuteError.StackOverflow => c.BASIC26_RUNTIME_ERROR_STACK_OVERFLOW,
+                                ExecuteError.UndefinedFunction => c.BASIC26_RUNTIME_ERROR_UNDEFINED_FUNCTION,
+                                ExecuteError.UndefinedVariable => c.BASIC26_RUNTIME_ERROR_UNDEFINED_VARIABLE,
+                                ExecuteError.InvalidBitShift => c.BASIC26_RUNTIME_ERROR_INVALID_BIT_SHIFT,
+                                ExecuteError.FunctionError => c.BASIC26_RUNTIME_ERROR_FUNCTION,
+                                else => c.BASIC26_RUNTIME_ERROR_UNKNOWN,
+                            };
+                        }
+
+                        return c.BASIC26_RESULT_RUNTIME_ERROR;
+                    },
+                }
+
+                // Always check time after a CALL opcode completes, regardless of
+                // time_check_interval, so that long-running native callbacks
+                // cannot bypass the time limit.
+                if (comptime check_time_limit) {
+                    if (is_call_op) {
+                        const current_time = std.Io.Timestamp.now(vm.io.io(), .real);
+                        const elapsed = current_time.nanoseconds - start_time.nanoseconds;
+
+                        if (elapsed >= limits.max_time_ns) {
+                            return c.BASIC26_RESULT_OUT_OF_LIMITS;
+                        }
+
+                        ops_since_time_check = 0;
+                    }
+                }
+            }
+
+            return c.BASIC26_RESULT_OK;
+        }
+    };
+}
+
 export fn basic26_Vm_run(
     c_vm: ?*c.basic26_Vm,
     options: ?*const c.basic26_RunOptions,
 ) callconv(.c) c.basic26_Result {
     std.debug.assert(c_vm != null);
     std.debug.assert(options != null);
+    std.debug.assert(options.?.limits != null);
 
     const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
     const state: *State = @ptrCast(@alignCast(options.?.state.?));
     const script: *const Script = @ptrCast(@alignCast(options.?.script.?));
-    const limits = options.?.limits.?;
+    const limits: *const c.basic26_RunLimits = @ptrCast(@alignCast(options.?.limits));
 
-    if (state.ip >= script.ops.items.len) {
-        return c.BASIC26_RESULT_OK;
+    const check_ops = limits.max_ops > 0;
+    const check_time = limits.max_time_ns > 0;
+
+    if (check_ops and check_time) {
+        return RunLoop(true, true).run(vm, state, script, limits, options.?.userdata, options.?.error_out);
+    } else if (check_ops) {
+        return RunLoop(true, false).run(vm, state, script, limits, options.?.userdata, options.?.error_out);
+    } else if (check_time) {
+        return RunLoop(false, true).run(vm, state, script, limits, options.?.userdata, options.?.error_out);
+    } else {
+        return RunLoop(false, false).run(vm, state, script, limits, options.?.userdata, options.?.error_out);
     }
-
-    const start_time = std.Io.Timestamp.now(vm.io.io(), .real);
-    var ops_executed: usize = 0;
-
-    while (state.ip < script.ops.items.len) {
-        if (limits.*.max_ops > 0 and ops_executed >= limits.*.max_ops) {
-            return c.BASIC26_RESULT_OUT_OF_LIMITS;
-        }
-
-        if (limits.*.max_time_ns > 0) {
-            const current_time = std.Io.Timestamp.now(vm.io.io(), .real);
-            const elapsed = current_time.nanoseconds - start_time.nanoseconds;
-
-            if (elapsed >= limits.*.max_time_ns) {
-                return c.BASIC26_RESULT_OUT_OF_LIMITS;
-            }
-        }
-
-        const op = script.ops.items[state.ip];
-        const prev_ip = state.ip;
-
-        state.ip += 1;
-        ops_executed += 1;
-
-        switch (vm.execute(state, script, options.?.userdata, op)) {
-            .ok => {},
-            .yield => return c.BASIC26_RESULT_YIELDED,
-            .err => |err| {
-                if (options.?.error_out) |err_out| {
-                    err_out.*.ip = prev_ip;
-                    err_out.*.code = switch (err) {
-                        ExecuteError.DivisionByZero => c.BASIC26_RUNTIME_ERROR_DIVISION_BY_ZERO,
-                        ExecuteError.TypeMismatch => c.BASIC26_RUNTIME_ERROR_TYPE_MISMATCH,
-                        ExecuteError.StackUnderflow => c.BASIC26_RUNTIME_ERROR_STACK_UNDERFLOW,
-                        ExecuteError.StackOverflow => c.BASIC26_RUNTIME_ERROR_STACK_OVERFLOW,
-                        ExecuteError.UndefinedFunction => c.BASIC26_RUNTIME_ERROR_UNDEFINED_FUNCTION,
-                        ExecuteError.UndefinedVariable => c.BASIC26_RUNTIME_ERROR_UNDEFINED_VARIABLE,
-                        ExecuteError.InvalidBitShift => c.BASIC26_RUNTIME_ERROR_INVALID_BIT_SHIFT,
-                        ExecuteError.FunctionError => c.BASIC26_RUNTIME_ERROR_FUNCTION,
-                        else => c.BASIC26_RUNTIME_ERROR_UNKNOWN,
-                    };
-                }
-
-                return c.BASIC26_RESULT_RUNTIME_ERROR;
-            },
-        }
-    }
-
-    return c.BASIC26_RESULT_OK;
 }
 
 const State = struct {

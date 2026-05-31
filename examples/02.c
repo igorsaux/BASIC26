@@ -243,6 +243,7 @@ double run_benchmark(int iterations)
                                      .limits = &(basic26_RunLimits){
                                          .max_ops = 0,
                                          .max_time_ns = 0,
+                                         .time_check_interval = 0,
                                      },
                                      .userdata = NULL,
                                      .error_out = &run_err,
