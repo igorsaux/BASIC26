@@ -4,11 +4,13 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #ifdef _WIN32
 #include <windows.h>
 #else
 #include <time.h>
+#include <sched.h>
 #endif
 
 #include <basic26.h>
@@ -25,7 +27,9 @@
 
 #define FIB_N 40
 
-#define ITERATIONS 100000
+#define WARMUP_ITERATIONS 1000
+#define BENCH_ITERATIONS 10000
+#define RUNS 10
 
 basic26_Vm *vm = NULL;
 basic26_State *state = NULL;
@@ -97,7 +101,11 @@ static long long now_ns(void)
 static long long now_ns(void)
 {
     struct timespec ts;
+#ifdef CLOCK_MONOTONIC_RAW
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+#else
     clock_gettime(CLOCK_MONOTONIC, &ts);
+#endif
 
     return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
@@ -162,6 +170,90 @@ void cleanup(void)
     vm = NULL;
 }
 
+int compare_doubles(const void *a, const void *b)
+{
+    double da = *(const double *)a;
+    double db = *(const double *)b;
+
+    if (da < db)
+        return -1;
+
+    if (da > db)
+        return 1;
+
+    return 0;
+}
+
+typedef struct
+{
+    double mean;
+    double median;
+    double min;
+    double max;
+    double std_dev;
+    double p95;
+    double p99;
+} Stats;
+
+Stats compute_stats(double *values, size_t n)
+{
+    Stats s;
+
+    qsort(values, n, sizeof(double), compare_doubles);
+
+    s.min = values[0];
+    s.max = values[n - 1];
+    s.median = values[n / 2];
+    s.p95 = values[(size_t)(n * 0.95)];
+    s.p99 = values[(size_t)(n * 0.99)];
+
+    double sum = 0.0;
+    for (size_t i = 0; i < n; i++)
+    {
+        sum += values[i];
+    }
+
+    s.mean = sum / n;
+
+    double variance = 0.0;
+    for (size_t i = 0; i < n; i++)
+    {
+        double diff = values[i] - s.mean;
+        variance += diff * diff;
+    }
+
+    s.std_dev = sqrt(variance / n);
+
+    return s;
+}
+
+double run_benchmark(int iterations)
+{
+    basic26_RuntimeErrorInfo run_err;
+
+    const long long start = now_ns();
+
+    for (int i = 0; i < iterations; i++)
+    {
+        reset_state(state);
+
+        CHECK(basic26_Vm_run(vm, &(basic26_RunOptions){
+                                     .state = state,
+                                     .script = script,
+                                     .limits = &(basic26_RunLimits){
+                                         .max_ops = 0,
+                                         .max_time_ns = 0,
+                                     },
+                                     .userdata = NULL,
+                                     .error_out = &run_err,
+                                 }) == BASIC26_RESULT_OK);
+    }
+
+    const long long end = now_ns();
+
+    return (double)(end - start) / iterations;
+}
+
 int main(void)
 {
     const int64_t expected = fib_reference(FIB_N);
@@ -206,49 +298,95 @@ int main(void)
     if (result != expected)
     {
         cleanup();
+
         return 1;
     }
 
-    const long long bench_start = now_ns();
+    printf("\n--- Benchmark ---\n");
+    printf("fib(%d) x %d iterations per run, %d runs\n", FIB_N, BENCH_ITERATIONS, RUNS);
+    printf("Warmup: %d iterations\n\n", WARMUP_ITERATIONS);
 
-    for (int i = 0; i < ITERATIONS; i++)
+    printf("Warming up...\n");
+    for (int i = 0; i < WARMUP_ITERATIONS; i++)
     {
         reset_state(state);
-
         CHECK(basic26_Vm_run(vm, &(basic26_RunOptions){
                                      .state = state,
                                      .script = script,
-                                     .limits = &(basic26_RunLimits){
-                                         .max_ops = 0,
-                                         .max_time_ns = 0,
-                                     },
+                                     .limits = &(basic26_RunLimits){0},
                                      .userdata = NULL,
                                      .error_out = &run_err,
                                  }) == BASIC26_RESULT_OK);
     }
 
-    const long long bench_end = now_ns();
-    const int64_t bench_result = get_int_var(state, symbol_b);
+    printf("Warmup complete.\n\n");
 
-    printf("Post-benchmark: fib(%d) = %lld (expected %lld) %s\n",
+    double *run_results = malloc(RUNS * sizeof(double));
+
+    for (int run = 0; run < RUNS; run++)
+    {
+        run_results[run] = run_benchmark(BENCH_ITERATIONS);
+        printf("Run %2d: %.0f ns/iter\n", run + 1, run_results[run]);
+    }
+
+    Stats overall = compute_stats(run_results, RUNS);
+
+    printf("\n--- Results (ns/iter) ---\n");
+    printf("Mean:     %.0f ns\n", overall.mean);
+    printf("Median:   %.0f ns\n", overall.median);
+    printf("Min:      %.0f ns\n", overall.min);
+    printf("Max:      %.0f ns\n", overall.max);
+    printf("Std Dev:  %.1f ns (%.1f%%)\n", overall.std_dev, (overall.std_dev / overall.mean) * 100);
+    printf("P95:      %.0f ns\n", overall.p95);
+    printf("P99:      %.0f ns\n", overall.p99);
+
+    double *per_iter_times = malloc(BENCH_ITERATIONS * sizeof(double));
+    printf("\n--- Detailed per-iteration analysis (last run) ---\n");
+
+    basic26_RuntimeErrorInfo last_run_err;
+    for (int i = 0; i < BENCH_ITERATIONS; i++)
+    {
+        reset_state(state);
+
+        const long long iter_start = now_ns();
+        CHECK(basic26_Vm_run(vm, &(basic26_RunOptions){
+                                     .state = state,
+                                     .script = script,
+                                     .limits = &(basic26_RunLimits){0},
+                                     .userdata = NULL,
+                                     .error_out = &last_run_err,
+                                 }) == BASIC26_RESULT_OK);
+        const long long iter_end = now_ns();
+
+        per_iter_times[i] = (double)(iter_end - iter_start);
+    }
+
+    Stats per_iter = compute_stats(per_iter_times, BENCH_ITERATIONS);
+    printf("Mean:     %.0f ns\n", per_iter.mean);
+    printf("Median:   %.0f ns\n", per_iter.median);
+    printf("Min:      %.0f ns\n", per_iter.min);
+    printf("Max:      %.0f ns\n", per_iter.max);
+    printf("Std Dev:  %.1f ns (%.1f%%)\n", per_iter.std_dev, (per_iter.std_dev / per_iter.mean) * 100);
+    printf("P95:      %.0f ns\n", per_iter.p95);
+    printf("P99:      %.0f ns\n", per_iter.p99);
+
+    const int64_t bench_result = get_int_var(state, symbol_b);
+    printf("\nPost-benchmark: fib(%d) = %lld (expected %lld) %s\n",
            FIB_N, (long long)bench_result, (long long)expected,
            bench_result == expected ? "OK" : "MISMATCH");
 
     if (bench_result != expected)
     {
+        free(run_results);
+        free(per_iter_times);
         cleanup();
+
         return 1;
     }
 
-    const long long total_ns = bench_end - bench_start;
-    const double total_ms = total_ns / 1e6;
-    const double per_iter_ns = (double)total_ns / ITERATIONS;
-
-    printf("\n--- Benchmark ---\n");
-    printf("fib(%d) x %d iterations\n", FIB_N, ITERATIONS);
-    printf("Total:   %.2f ms\n", total_ms);
-    printf("Average: %.0f ns/iter\n", per_iter_ns);
-
+    free(run_results);
+    free(per_iter_times);
     cleanup();
+
     return 0;
 }
