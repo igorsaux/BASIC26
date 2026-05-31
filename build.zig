@@ -23,7 +23,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
-        .strip = optimize != .Debug,
         .imports = &.{
             .{ .name = "capi", .module = t.mod },
         },
@@ -62,7 +61,6 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
-            .strip = optimize != .Debug,
             .link_libc = true,
         }),
     });
@@ -81,7 +79,6 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
-            .strip = optimize != .Debug,
             .link_libc = true,
         }),
     });
