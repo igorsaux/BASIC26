@@ -1284,26 +1284,26 @@ const OpInfo = struct {
 };
 
 const operator_map = std.StaticStringMap(OpInfo).initComptime(.{
-    .{ "OR", @as(OpInfo, .{ .precedence = 9, .right_assoc = false, .op = .bool_or }) },
-    .{ "AND", @as(OpInfo, .{ .precedence = 8, .right_assoc = false, .op = .bool_and }) },
-    .{ "==", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .eq }) },
-    .{ "!=", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .neq }) },
-    .{ "<", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .lt }) },
-    .{ ">", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .gt }) },
-    .{ "<=", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .lte }) },
-    .{ ">=", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .gte }) },
-    .{ "|", @as(OpInfo, .{ .precedence = 6, .right_assoc = false, .op = .bit_or }) },
-    .{ "^", @as(OpInfo, .{ .precedence = 6, .right_assoc = false, .op = .bit_xor }) },
-    .{ "&", @as(OpInfo, .{ .precedence = 6, .right_assoc = false, .op = .bit_and }) },
+    .{ "OR", @as(OpInfo, .{ .precedence = 1, .right_assoc = false, .op = .bool_or }) },
+    .{ "AND", @as(OpInfo, .{ .precedence = 2, .right_assoc = false, .op = .bool_and }) },
+    .{ "==", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .eq }) },
+    .{ "!=", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .neq }) },
+    .{ "<", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .lt }) },
+    .{ ">", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .gt }) },
+    .{ "<=", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .lte }) },
+    .{ ">=", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .gte }) },
+    .{ "|", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .op = .bit_or }) },
+    .{ "^", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .op = .bit_xor }) },
+    .{ "&", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .op = .bit_and }) },
     .{ "<<", @as(OpInfo, .{ .precedence = 5, .right_assoc = false, .op = .shl }) },
     .{ ">>", @as(OpInfo, .{ .precedence = 5, .right_assoc = false, .op = .shr }) },
-    .{ "+", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .op = .add }) },
-    .{ "-", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .op = .sub }) },
-    .{ "*", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .mul }) },
-    .{ "/", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .div }) },
-    .{ "%", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .rem }) },
-    .{ "NOT", @as(OpInfo, .{ .precedence = 1, .right_assoc = true, .op = .bool_not }) },
-    .{ "~", @as(OpInfo, .{ .precedence = 1, .right_assoc = true, .op = .bit_not }) },
+    .{ "+", @as(OpInfo, .{ .precedence = 6, .right_assoc = false, .op = .add }) },
+    .{ "-", @as(OpInfo, .{ .precedence = 6, .right_assoc = false, .op = .sub }) },
+    .{ "*", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .mul }) },
+    .{ "/", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .div }) },
+    .{ "%", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .rem }) },
+    .{ "NOT", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .op = .bool_not }) },
+    .{ "~", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .op = .bit_not }) },
 });
 
 const special_float_set = std.StaticStringMap(void).initComptime(.{
@@ -3123,6 +3123,168 @@ test "Symbol literal" {
 
     try std.testing.expect(b_val.type == c.BASIC26_VALUE_TYPE_SYMBOL);
     try std.testing.expectEqual(a_symbol, b_val.as.symbol_id);
+}
+
+test "Operator precedence: mul before add/sub" {
+    var c_vm: ?*c.basic26_Vm = null;
+    try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer c.basic26_Vm_destroy(c_vm.?);
+
+    var c_state: ?*c.basic26_State = null;
+    try expectStatus(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+
+    var c_script: ?*c.basic26_Script = null;
+    try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
+    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+
+    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+
+    const SOURCE =
+        \\a = 2 + 3 * 4
+        \\b = 10 - 2 * 3
+        \\c = 3 * 2 + 1
+        \\d = 10 - 3 - 2
+    ;
+
+    try expectStatus(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Script_compile(c_script.?, &.{
+            .vm = c_vm.?,
+            .source = SOURCE.ptr,
+            .source_len = SOURCE.len,
+            .limits = &.{},
+        }, &c_compile_error),
+    );
+
+    try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "b", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "c", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "d", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+
+    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    try expectStatus(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Vm_run(c_vm.?, &.{
+            .state = c_state.?,
+            .script = c_script.?,
+            .limits = &.{},
+            .userdata = null,
+            .error_out = &c_run_error,
+        }),
+    );
+
+    try std.testing.expectEqual(14, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
+    try std.testing.expectEqual(4, (try getVar(c_vm.?, c_state.?, "b")).as.int_val);
+    try std.testing.expectEqual(7, (try getVar(c_vm.?, c_state.?, "c")).as.int_val);
+    try std.testing.expectEqual(5, (try getVar(c_vm.?, c_state.?, "d")).as.int_val);
+}
+
+test "Operator precedence: arithmetic before comparison" {
+    var c_vm: ?*c.basic26_Vm = null;
+    try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer c.basic26_Vm_destroy(c_vm.?);
+
+    var c_state: ?*c.basic26_State = null;
+    try expectStatus(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+
+    var c_script: ?*c.basic26_Script = null;
+    try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
+    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+
+    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+
+    const SOURCE =
+        \\a = 5 * 5 <= 30
+        \\b = 3 + 7 > 8
+        \\c = 2 * 3 == 6
+        \\d = 1 OR 0 AND 0
+    ;
+
+    try expectStatus(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Script_compile(c_script.?, &.{
+            .vm = c_vm.?,
+            .source = SOURCE.ptr,
+            .source_len = SOURCE.len,
+            .limits = &.{},
+        }, &c_compile_error),
+    );
+
+    try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "b", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "c", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "d", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+
+    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    try expectStatus(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Vm_run(c_vm.?, &.{
+            .state = c_state.?,
+            .script = c_script.?,
+            .limits = &.{},
+            .userdata = null,
+            .error_out = &c_run_error,
+        }),
+    );
+
+    try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
+    try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "b")).as.int_val);
+    try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "c")).as.int_val);
+    try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "d")).as.int_val);
+}
+
+test "Operator precedence: modulo before equality" {
+    var c_vm: ?*c.basic26_Vm = null;
+    try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer c.basic26_Vm_destroy(c_vm.?);
+
+    var c_state: ?*c.basic26_State = null;
+    try expectStatus(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+
+    var c_script: ?*c.basic26_Script = null;
+    try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
+    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+
+    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+
+    const SOURCE =
+        \\a = 6 % 3 == 0
+        \\b = 7 % 2 == 1
+        \\c = 10 % 5 != 1
+    ;
+
+    try expectStatus(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Script_compile(c_script.?, &.{
+            .vm = c_vm.?,
+            .source = SOURCE.ptr,
+            .source_len = SOURCE.len,
+            .limits = &.{},
+        }, &c_compile_error),
+    );
+
+    try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "b", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "c", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+
+    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    try expectStatus(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Vm_run(c_vm.?, &.{
+            .state = c_state.?,
+            .script = c_script.?,
+            .limits = &.{},
+            .userdata = null,
+            .error_out = &c_run_error,
+        }),
+    );
+
+    try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
+    try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "b")).as.int_val);
+    try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "c")).as.int_val);
 }
 
 // Does not work for now (at least on macOS)
