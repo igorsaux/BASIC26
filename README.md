@@ -209,41 +209,130 @@ zig build install
 
 The build produces:
 
-- `libbasic26.a` - static library
+- `libbasic26-static.a` - static library
 - `libbasic26.so` (or `.dylib` / `.dll`) - shared library
 - `basic26.h` - installed header file
-- `example_01` and `example_02` - compiled example executables
+- `example_01` - compiled example executable (linked against the shared library)
+- `example_02` - compiled example executable (linked against the static library)
 
 ### Linking from a C project
 
 1. Include `src/basic26.h` in your source files.
-2. Link against the static or dynamic library (`-lbasic26`).
-3. Ensure the Zig runtime is available if using the shared library on some platforms.
+2. Link against the static library (`-lbasic26-static`) or the dynamic library (`-lbasic26`).
+3. On Windows, define `BASIC26_STATIC` when linking against the static library, or `BASIC26_DYNAMIC` when linking against the dynamic library. These macros control symbol visibility via `__declspec(dllimport)` and must be set consistently with your chosen linkage to avoid linker errors. On non-Windows platforms, these macros have no effect and can be omitted.
+
+### Using in a Zig project
+
+Add BASIC26 as a dependency in your `build.zig.zon` and reference it in `build.zig`:
+
+```zig
+const basic26 = b.dependency("basic26", .{
+    .target = target,
+    .optimize = optimize,
+});
+
+const mod = b.createModule(.{
+    .root_source_file = b.path("src/root.zig"),
+    .target = target,
+    .optimize = optimize,
+    // ...your other options...
+    .imports = &.{
+        // ...your other imports...
+        .{ .name = "basic26", .module = basic26.module("basic26") },
+    },
+});
+
+// Static linking
+mod.linkLibrary(basic26.artifact("basic26-static"));
+
+// OR dynamic linking
+// mod.linkLibrary(basic26.artifact("basic26"));
+```
+
+- `basic26.module("basic26")` - exposes the Zig module with translated C API types and declarations, which you can import in your Zig source with `@import("basic26")`.
+- `basic26.artifact("basic26-static")` - the static library artifact, for static linking.
+- `basic26.artifact("basic26")` - the shared library artifact, for dynamic linking.
+
+When using dynamic linking, you typically also want to install the shared library so it is available at runtime:
+
+```zig
+b.installArtifact(basic26.artifact("basic26"));
+```
 
 ## Examples
 
 ### Example 01 - Feature Tour (`examples/01.c`)
 
-Demonstrates the full API lifecycle: creating a VM, compiling a script, registering native functions (PRINT, VAR, NEW, DEL, WAIT), running the script with a yield-aware loop, and cleaning up. The script itself exercises strings, symbols, NULL, variables, object pointers, all value types, and the YIELD mechanism for asynchronous operations (WAIT suspends for 2 seconds, then resumes).
+Demonstrates the full API lifecycle: creating a VM, compiling a script, registering native functions (PRINT, VAR, NEW, DEL, WAIT), running the script with a yield-aware loop, and cleaning up. The script itself exercises strings, symbols, NULL, variables, object pointers, all value types, and the YIELD mechanism for asynchronous operations (WAIT suspends for 2 seconds, then resumes). This example links against the shared library.
 
 ### Example 02 - Fibonacci Benchmark (`examples/02.c`)
 
-Computes Fibonacci numbers using a WHILE loop. Shows how to set variables from C before execution, read them back after, reset state for repeated runs, and measure performance with execution timing. Demonstrates the WHILE/ENDWHILE control flow construct and the State reset/clear API.
+Computes Fibonacci numbers using a WHILE loop. Shows how to set variables from C before execution, read them back after, reset state for repeated runs, and measure performance with execution timing. Demonstrates the WHILE/ENDWHILE control flow construct and the State reset/clear API. This example links against the static library.
 
 ## Benchmarks
 
 MacBook Air M3:
 
 ```
-fib(40) x 100000 iterations
-Total:   245.99 ms
-Average: 2460 ns/iter
+Run  1: 3649 ns/iter
+Run  2: 2637 ns/iter
+Run  3: 2332 ns/iter
+Run  4: 2328 ns/iter
+Run  5: 2348 ns/iter
+Run  6: 2346 ns/iter
+Run  7: 2351 ns/iter
+Run  8: 2354 ns/iter
+Run  9: 2354 ns/iter
+Run 10: 2345 ns/iter
+
+--- Results (ns/iter) ---
+Mean:     2505 ns
+Median:   2351 ns
+Min:      2328 ns
+Max:      3649 ns
+Std Dev:  391.6 ns (15.6%)
+P95:      3649 ns
+P99:      3649 ns
+
+--- Detailed per-iteration analysis (last run) ---
+Mean:     2344 ns
+Median:   2333 ns
+Min:      2250 ns
+Max:      11125 ns
+Std Dev:  234.1 ns (10.0%)
+P95:      2375 ns
+P99:      2708 ns
 ```
 
 Intel Core i5-11600K:
 
 ```
-fib(40) x 100000 iterations
-Total:   357.87 ms
-Average: 3579 ns/iter
+Run  1: 4723 ns/iter
+Run  2: 4586 ns/iter
+Run  3: 4643 ns/iter
+Run  4: 4640 ns/iter
+Run  5: 4636 ns/iter
+Run  6: 4592 ns/iter
+Run  7: 4640 ns/iter
+Run  8: 4639 ns/iter
+Run  9: 4599 ns/iter
+Run 10: 4664 ns/iter
+
+--- Results (ns/iter) ---
+Mean:     4636 ns
+Median:   4640 ns
+Min:      4586 ns
+Max:      4723 ns
+Std Dev:  37.7 ns (0.8%)
+P95:      4723 ns
+P99:      4723 ns
+
+--- Detailed per-iteration analysis (last run) ---
+Mean:     4523 ns
+Median:   4500 ns
+Min:      4300 ns
+Max:      37700 ns
+Std Dev:  463.9 ns (10.3%)
+P95:      4800 ns
+P99:      4901 ns
 ```

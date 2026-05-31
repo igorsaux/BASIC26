@@ -744,7 +744,10 @@ export fn basic26_CreateVmOptions_zeroed() callconv(.c) c.basic26_CreateVmOption
     return .{};
 }
 
-export fn basic26_Vm_create(options: ?*const c.basic26_CreateVmOptions, out: ?**c.basic26_Vm) callconv(.c) c.basic26_Result {
+export fn basic26_Vm_create(
+    options: ?*const c.basic26_CreateVmOptions,
+    out: ?*?*c.basic26_Vm,
+) callconv(.c) c.basic26_Result {
     std.debug.assert(options != null);
     std.debug.assert(out != null);
 
@@ -784,7 +787,10 @@ export fn basic26_ClearVmOptions_zeroed() callconv(.c) c.basic26_ClearVmOptions 
     return .{};
 }
 
-export fn basic26_Vm_clear(c_vm: ?*c.basic26_Vm, options: ?*const c.basic26_ClearVmOptions) callconv(.c) void {
+export fn basic26_Vm_clear(
+    c_vm: ?*c.basic26_Vm,
+    options: ?*const c.basic26_ClearVmOptions,
+) callconv(.c) void {
     std.debug.assert(c_vm != null);
     std.debug.assert(options != null);
 
@@ -847,7 +853,10 @@ export fn basic26_Vm_get_string_id(
     return c.BASIC26_RESULT_OK;
 }
 
-export fn basic26_Vm_register_function(c_vm: ?*c.basic26_Vm, options: ?*const c.basic26_RegisterFunctionOptions) c.basic26_Result {
+export fn basic26_Vm_register_function(
+    c_vm: ?*c.basic26_Vm,
+    options: ?*const c.basic26_RegisterFunctionOptions,
+) callconv(.c) c.basic26_Result {
     std.debug.assert(c_vm != null);
     std.debug.assert(options != null);
     std.debug.assert(options.?.callback != null);
@@ -861,7 +870,10 @@ export fn basic26_Vm_register_function(c_vm: ?*c.basic26_Vm, options: ?*const c.
     return c.BASIC26_RESULT_OK;
 }
 
-export fn basic26_Vm_unregister_function(c_vm: ?*c.basic26_Vm, symbol_id: c.basic26_SymbolId) callconv(.c) void {
+export fn basic26_Vm_unregister_function(
+    c_vm: ?*c.basic26_Vm,
+    symbol_id: c.basic26_SymbolId,
+) callconv(.c) void {
     std.debug.assert(c_vm != null);
 
     const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
@@ -880,7 +892,10 @@ export fn basic26_RunOptions_zeroed() callconv(.c) c.basic26_RunOptions {
     return .{};
 }
 
-export fn basic26_Vm_run(c_vm: ?*c.basic26_Vm, options: ?*const c.basic26_RunOptions) c.basic26_Result {
+export fn basic26_Vm_run(
+    c_vm: ?*c.basic26_Vm,
+    options: ?*const c.basic26_RunOptions,
+) callconv(.c) c.basic26_Result {
     std.debug.assert(c_vm != null);
     std.debug.assert(options != null);
 
@@ -963,7 +978,10 @@ export fn basic26_CreateStateOptions_zeroed() callconv(.c) c.basic26_CreateState
     return .{};
 }
 
-export fn basic26_State_create(options: ?*const c.basic26_CreateStateOptions, out: ?**c.basic26_State) callconv(.c) c.basic26_Result {
+export fn basic26_State_create(
+    options: ?*const c.basic26_CreateStateOptions,
+    out: ?*?*c.basic26_State,
+) callconv(.c) c.basic26_Result {
     std.debug.assert(options != null);
     std.debug.assert(options.?.vm != null);
 
@@ -976,7 +994,10 @@ export fn basic26_State_create(options: ?*const c.basic26_CreateStateOptions, ou
     return c.BASIC26_RESULT_OK;
 }
 
-export fn basic26_State_destroy(c_state: ?*c.basic26_State, c_vm: ?*c.basic26_Vm) callconv(.c) void {
+export fn basic26_State_destroy(
+    c_state: ?*c.basic26_State,
+    c_vm: ?*c.basic26_Vm,
+) callconv(.c) void {
     std.debug.assert(c_vm != null);
 
     if (c_state == null) {
@@ -994,7 +1015,10 @@ export fn basic26_ClearStateOptions_zeroed() callconv(.c) c.basic26_ClearStateOp
     return .{};
 }
 
-export fn basic26_State_clear(c_state: ?*c.basic26_State, options: ?*const c.basic26_ClearStateOptions) callconv(.c) void {
+export fn basic26_State_clear(
+    c_state: ?*c.basic26_State,
+    options: ?*const c.basic26_ClearStateOptions,
+) callconv(.c) void {
     std.debug.assert(c_state != null);
     std.debug.assert(options != null);
 
@@ -1009,7 +1033,10 @@ export fn basic26_State_clear(c_state: ?*c.basic26_State, options: ?*const c.bas
     }
 }
 
-export fn basic26_State_get_ip(c_state: ?*const c.basic26_State, out_ip: ?*usize) callconv(.c) void {
+export fn basic26_State_get_ip(
+    c_state: ?*const c.basic26_State,
+    out_ip: ?*usize,
+) callconv(.c) void {
     std.debug.assert(c_state != null);
     std.debug.assert(out_ip != null);
 
@@ -1017,7 +1044,10 @@ export fn basic26_State_get_ip(c_state: ?*const c.basic26_State, out_ip: ?*usize
     out_ip.?.* = state.ip;
 }
 
-export fn basic26_State_set_ip(c_state: ?*c.basic26_State, ip: usize) callconv(.c) void {
+export fn basic26_State_set_ip(
+    c_state: ?*c.basic26_State,
+    ip: usize,
+) callconv(.c) void {
     std.debug.assert(c_state != null);
 
     const state: *State = @ptrCast(@alignCast(c_state.?));
@@ -1058,7 +1088,10 @@ export fn basic26_State_set_var(
     return c.BASIC26_RESULT_OK;
 }
 
-export fn basic26_Script_create(c_vm: ?*c.basic26_Vm, out: ?**c.basic26_Script) callconv(.c) c.basic26_Result {
+export fn basic26_Script_create(
+    c_vm: ?*c.basic26_Vm,
+    out: ?*?*c.basic26_Script,
+) callconv(.c) c.basic26_Result {
     std.debug.assert(c_vm != null);
     std.debug.assert(out != null);
 
@@ -1870,7 +1903,10 @@ const ParserState = struct {
     }
 };
 
-export fn basic26_Script_destroy(c_script: ?*c.basic26_Script, c_vm: ?*c.basic26_Vm) callconv(.c) void {
+export fn basic26_Script_destroy(
+    c_script: ?*c.basic26_Script,
+    c_vm: ?*c.basic26_Vm,
+) callconv(.c) void {
     std.debug.assert(c_vm != null);
 
     if (c_script == null) {
@@ -1888,7 +1924,10 @@ export fn basic26_ClearScriptOptions_zeroed() callconv(.c) c.basic26_ClearScript
     return .{};
 }
 
-export fn basic26_Script_clear(c_script: ?*c.basic26_Script, options: ?*const c.basic26_ClearScriptOptions) callconv(.c) void {
+export fn basic26_Script_clear(
+    c_script: ?*c.basic26_Script,
+    options: ?*const c.basic26_ClearScriptOptions,
+) callconv(.c) void {
     std.debug.assert(c_script != null);
 
     const script: *Script = @ptrCast(@alignCast(c_script));
@@ -2065,7 +2104,11 @@ export fn basic26_Script_dump(
     return c.BASIC26_RESULT_OK;
 }
 
-export fn basic26_Script_dump_free(c_vm: ?*c.basic26_Vm, c_dump: ?[*]u8, dump_len: usize) callconv(.c) void {
+export fn basic26_Script_dump_free(
+    c_vm: ?*c.basic26_Vm,
+    c_dump: ?[*]u8,
+    dump_len: usize,
+) callconv(.c) void {
     std.debug.assert(c_vm != null);
 
     if (c_dump == null) {

@@ -150,14 +150,18 @@ extern "C"
 #endif
 
 #if defined(_WIN32) || defined(__CYGWIN__)
-#if defined(BASIC26_BUILDING_DLL)
-#define BASIC26_API __declspec(dllexport)
-#elif defined(BASIC26_STATIC)
+#if defined(BASIC26_STATIC)
 #define BASIC26_API
-#else
+#elif defined(BASIC26_DYNAMIC)
 #define BASIC26_API __declspec(dllimport)
+#else
+#define BASIC26_API
 #endif
-#define BASIC26_API_CALL __stdcall
+#if defined(_M_IX86) || defined(__i386__)
+#define BASIC26_API_CALL __cdecl
+#else
+#define BASIC26_API_CALL
+#endif
 #else
 #if __GNUC__ >= 4 || defined(__clang__)
 #define BASIC26_API __attribute__((visibility("default")))

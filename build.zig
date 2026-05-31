@@ -14,11 +14,12 @@ pub fn build(b: *std.Build) void {
         .c_source_file = b.path("src/basic26.h"),
         .target = target,
         .optimize = optimize,
-        .link_libc = false,
         .default_init = true,
     });
 
-    const basic26_mod = b.addModule("basic26", .{
+    b.modules.put(b.allocator, "basic26", t.mod) catch @panic("OOM");
+
+    const basic26_mod = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
@@ -29,7 +30,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const basic26_static_lib = b.addLibrary(.{
-        .name = "basic26",
+        .name = "basic26-static",
         .root_module = basic26_mod,
         .linkage = .static,
     });
@@ -71,8 +72,7 @@ pub fn build(b: *std.Build) void {
         .language = .c,
     });
     example_01.root_module.addIncludePath(b.path("src/"));
-    example_01.root_module.addCMacro("BASIC26_STATIC", "1");
-    example_01.root_module.linkLibrary(basic26_static_lib);
+    example_01.root_module.linkLibrary(basic26_dynamic_lib);
 
     b.installArtifact(example_01);
 
@@ -91,7 +91,6 @@ pub fn build(b: *std.Build) void {
         .language = .c,
     });
     example_02.root_module.addIncludePath(b.path("src/"));
-    example_02.root_module.addCMacro("BASIC26_STATIC", "1");
     example_02.root_module.linkLibrary(basic26_static_lib);
 
     b.installArtifact(example_02);
