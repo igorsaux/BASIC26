@@ -274,34 +274,34 @@ Computes Fibonacci numbers using a WHILE loop. Shows how to set variables from C
 MacBook Air M3:
 
 ```
-Run  1: 3649 ns/iter
-Run  2: 2637 ns/iter
-Run  3: 2332 ns/iter
-Run  4: 2328 ns/iter
-Run  5: 2348 ns/iter
-Run  6: 2346 ns/iter
-Run  7: 2351 ns/iter
-Run  8: 2354 ns/iter
-Run  9: 2354 ns/iter
-Run 10: 2345 ns/iter
+Run  1: 2593 ns/iter
+Run  2: 2118 ns/iter
+Run  3: 1905 ns/iter
+Run  4: 1867 ns/iter
+Run  5: 1857 ns/iter
+Run  6: 1857 ns/iter
+Run  7: 1876 ns/iter
+Run  8: 1874 ns/iter
+Run  9: 2060 ns/iter
+Run 10: 1885 ns/iter
 
 --- Results (ns/iter) ---
-Mean:     2505 ns
-Median:   2351 ns
-Min:      2328 ns
-Max:      3649 ns
-Std Dev:  391.6 ns (15.6%)
-P95:      3649 ns
-P99:      3649 ns
+Mean:     1989 ns
+Median:   1885 ns
+Min:      1857 ns
+Max:      2593 ns
+Std Dev:  219.1 ns (11.0%)
+P95:      2593 ns
+P99:      2593 ns
 
 --- Detailed per-iteration analysis (last run) ---
-Mean:     2344 ns
-Median:   2333 ns
-Min:      2250 ns
-Max:      11125 ns
-Std Dev:  234.1 ns (10.0%)
-P95:      2375 ns
-P99:      2708 ns
+Mean:     1910 ns
+Median:   1875 ns
+Min:      1708 ns
+Max:      27167 ns
+Std Dev:  422.3 ns (22.1%)
+P95:      2042 ns
+P99:      2250 ns
 ```
 
 Intel Core i5-11600K:

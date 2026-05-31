@@ -278,43 +278,43 @@ const Vm = struct {
     }
 
     pub inline fn execute(this: *Vm, state: *State, script: *const Script, userdata: ?*anyopaque, op: Op) ExecuteResult {
-        const alloc = this.allocator.allocator();
-
         switch (op) {
             .push_int => {
-                state.stack.append(alloc, Value.fromInt(op.push_int)) catch {
-                    return .{ .err = error.OutOfMemory };
+                state.push(Value.fromInt(op.push_int)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .push_float => {
-                state.stack.append(alloc, Value.fromFloat(op.push_float)) catch {
-                    return .{ .err = error.OutOfMemory };
+                state.push(Value.fromFloat(op.push_float)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .push_string => {
-                state.stack.append(alloc, Value.fromString(op.push_string)) catch {
-                    return .{ .err = error.OutOfMemory };
+                state.push(Value.fromString(op.push_string)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .push_symbol => {
-                state.stack.append(alloc, Value.fromSymbol(op.push_symbol)) catch {
-                    return .{ .err = error.OutOfMemory };
+                state.push(Value.fromSymbol(op.push_symbol)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .push_null => {
-                state.stack.append(alloc, Value.fromNull()) catch return .{ .err = error.OutOfMemory };
+                state.push(Value.fromNull()) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
+                };
             },
             .load => |id| {
                 const val = state.vars.get(id) orelse {
                     return .{ .err = ExecuteError.UndefinedVariable };
                 };
 
-                state.stack.append(alloc, val) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(val) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .store => |id| {
-                const val = state.stack.pop() orelse {
+                const val = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -325,74 +325,74 @@ const Vm = struct {
                 entry.value_ptr.* = val;
             },
             .add => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
                 if (lhs.type == c.BASIC26_VALUE_TYPE_INT and rhs.type == c.BASIC26_VALUE_TYPE_INT) {
-                    state.stack.append(alloc, Value.fromInt(lhs.as.int_val +% rhs.as.int_val)) catch {
-                        return .{ .err = ExecuteError.OutOfMemory };
+                    state.push(Value.fromInt(lhs.as.int_val +% rhs.as.int_val)) catch {
+                        return .{ .err = ExecuteError.StackOverflow };
                     };
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_FLOAT and rhs.type == c.BASIC26_VALUE_TYPE_FLOAT) {
-                    state.stack.append(alloc, Value.fromFloat(lhs.as.float_val + rhs.as.float_val)) catch {
-                        return .{ .err = ExecuteError.OutOfMemory };
+                    state.push(Value.fromFloat(lhs.as.float_val + rhs.as.float_val)) catch {
+                        return .{ .err = ExecuteError.StackOverflow };
                     };
                 } else {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
             .sub => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
                 if (lhs.type == c.BASIC26_VALUE_TYPE_INT and rhs.type == c.BASIC26_VALUE_TYPE_INT) {
-                    state.stack.append(alloc, Value.fromInt(lhs.as.int_val -% rhs.as.int_val)) catch {
-                        return .{ .err = ExecuteError.OutOfMemory };
+                    state.push(Value.fromInt(lhs.as.int_val -% rhs.as.int_val)) catch {
+                        return .{ .err = ExecuteError.StackOverflow };
                     };
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_FLOAT and rhs.type == c.BASIC26_VALUE_TYPE_FLOAT) {
-                    state.stack.append(alloc, Value.fromFloat(lhs.as.float_val - rhs.as.float_val)) catch {
-                        return .{ .err = ExecuteError.OutOfMemory };
+                    state.push(Value.fromFloat(lhs.as.float_val - rhs.as.float_val)) catch {
+                        return .{ .err = ExecuteError.StackOverflow };
                     };
                 } else {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
             .mul => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
                 if (lhs.type == c.BASIC26_VALUE_TYPE_INT and rhs.type == c.BASIC26_VALUE_TYPE_INT) {
-                    state.stack.append(alloc, Value.fromInt(lhs.as.int_val *% rhs.as.int_val)) catch {
-                        return .{ .err = ExecuteError.OutOfMemory };
+                    state.push(Value.fromInt(lhs.as.int_val *% rhs.as.int_val)) catch {
+                        return .{ .err = ExecuteError.StackOverflow };
                     };
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_FLOAT and rhs.type == c.BASIC26_VALUE_TYPE_FLOAT) {
-                    state.stack.append(alloc, Value.fromFloat(lhs.as.float_val * rhs.as.float_val)) catch {
-                        return .{ .err = ExecuteError.OutOfMemory };
+                    state.push(Value.fromFloat(lhs.as.float_val * rhs.as.float_val)) catch {
+                        return .{ .err = ExecuteError.StackOverflow };
                     };
                 } else {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
             .div => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -402,28 +402,28 @@ const Vm = struct {
                     }
 
                     if (lhs.as.int_val == std.math.minInt(c.basic26_IntType) and rhs.as.int_val == -1) {
-                        state.stack.append(alloc, Value.fromInt(std.math.minInt(c.basic26_IntType))) catch {
-                            return .{ .err = ExecuteError.OutOfMemory };
+                        state.push(Value.fromInt(std.math.minInt(c.basic26_IntType))) catch {
+                            return .{ .err = ExecuteError.StackOverflow };
                         };
                     } else {
-                        state.stack.append(alloc, Value.fromInt(@divTrunc(lhs.as.int_val, rhs.as.int_val))) catch {
-                            return .{ .err = ExecuteError.OutOfMemory };
+                        state.push(Value.fromInt(@divTrunc(lhs.as.int_val, rhs.as.int_val))) catch {
+                            return .{ .err = ExecuteError.StackOverflow };
                         };
                     }
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_FLOAT and rhs.type == c.BASIC26_VALUE_TYPE_FLOAT) {
-                    state.stack.append(alloc, Value.fromFloat(lhs.as.float_val / rhs.as.float_val)) catch {
-                        return .{ .err = ExecuteError.OutOfMemory };
+                    state.push(Value.fromFloat(lhs.as.float_val / rhs.as.float_val)) catch {
+                        return .{ .err = ExecuteError.StackOverflow };
                     };
                 } else {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
             .rem => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -433,28 +433,28 @@ const Vm = struct {
                     }
 
                     if (lhs.as.int_val == std.math.minInt(c.basic26_IntType) and rhs.as.int_val == -1) {
-                        state.stack.append(alloc, Value.fromInt(std.math.minInt(c.basic26_IntType))) catch {
-                            return .{ .err = ExecuteError.OutOfMemory };
+                        state.push(Value.fromInt(std.math.minInt(c.basic26_IntType))) catch {
+                            return .{ .err = ExecuteError.StackOverflow };
                         };
                     } else {
-                        state.stack.append(alloc, Value.fromInt(@rem(lhs.as.int_val, rhs.as.int_val))) catch {
-                            return .{ .err = ExecuteError.OutOfMemory };
+                        state.push(Value.fromInt(@rem(lhs.as.int_val, rhs.as.int_val))) catch {
+                            return .{ .err = ExecuteError.StackOverflow };
                         };
                     }
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_FLOAT and rhs.type == c.BASIC26_VALUE_TYPE_FLOAT) {
-                    state.stack.append(alloc, Value.fromFloat(@rem(lhs.as.float_val, rhs.as.float_val))) catch {
-                        return .{ .err = ExecuteError.OutOfMemory };
+                    state.push(Value.fromFloat(@rem(lhs.as.float_val, rhs.as.float_val))) catch {
+                        return .{ .err = ExecuteError.StackOverflow };
                     };
                 } else {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
             .eq, .neq, .lt, .lte, .gt, .gte => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -504,16 +504,16 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
 
-                state.stack.append(alloc, Value.fromInt(if (res) 1 else 0)) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(Value.fromInt(if (res) 1 else 0)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .bool_and => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -527,16 +527,16 @@ const Vm = struct {
                 else
                     return .{ .err = ExecuteError.TypeMismatch };
 
-                state.stack.append(alloc, Value.fromInt(if (rhs_true and lhs_true) 1 else 0)) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(Value.fromInt(if (rhs_true and lhs_true) 1 else 0)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .bool_or => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -550,12 +550,12 @@ const Vm = struct {
                 else
                     return .{ .err = ExecuteError.TypeMismatch };
 
-                state.stack.append(alloc, Value.fromInt(if (rhs_true or lhs_true) 1 else 0)) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(Value.fromInt(if (rhs_true or lhs_true) 1 else 0)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .bool_not => {
-                const val = state.stack.pop() orelse {
+                const val = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -564,16 +564,16 @@ const Vm = struct {
                 else
                     return .{ .err = ExecuteError.TypeMismatch };
 
-                state.stack.append(alloc, Value.fromInt(if (is_false) 1 else 0)) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(Value.fromInt(if (is_false) 1 else 0)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .bit_and => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -581,16 +581,16 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
 
-                state.stack.append(alloc, Value.fromInt(rhs.as.int_val & lhs.as.int_val)) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(Value.fromInt(rhs.as.int_val & lhs.as.int_val)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .bit_or => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -598,16 +598,16 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
 
-                state.stack.append(alloc, Value.fromInt(rhs.as.int_val | lhs.as.int_val)) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(Value.fromInt(rhs.as.int_val | lhs.as.int_val)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .bit_xor => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -615,12 +615,12 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
 
-                state.stack.append(alloc, Value.fromInt(rhs.as.int_val ^ lhs.as.int_val)) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(Value.fromInt(rhs.as.int_val ^ lhs.as.int_val)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .bit_not => {
-                const value = state.stack.pop() orelse {
+                const value = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -628,16 +628,16 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
 
-                state.stack.append(alloc, Value.fromInt(~value.as.int_val)) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(Value.fromInt(~value.as.int_val)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .shl => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -649,16 +649,16 @@ const Vm = struct {
                     return .{ .err = ExecuteError.InvalidBitShift };
                 }
 
-                state.stack.append(alloc, Value.fromInt(std.math.shl(c.basic26_IntType, lhs.as.int_val, rhs.as.int_val))) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(Value.fromInt(std.math.shl(c.basic26_IntType, lhs.as.int_val, rhs.as.int_val))) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .shr => {
-                const rhs = state.stack.pop() orelse {
+                const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const lhs = state.stack.pop() orelse {
+                const lhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -670,13 +670,13 @@ const Vm = struct {
                     return .{ .err = ExecuteError.InvalidBitShift };
                 }
 
-                state.stack.append(alloc, Value.fromInt(std.math.shr(c.basic26_IntType, lhs.as.int_val, rhs.as.int_val))) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
+                state.push(Value.fromInt(std.math.shr(c.basic26_IntType, lhs.as.int_val, rhs.as.int_val))) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
                 };
             },
             .jump => |ip| state.ip = ip,
             .jump_if_false => |ip| {
-                const val = state.stack.pop() orelse {
+                const val = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -690,7 +690,7 @@ const Vm = struct {
                 }
             },
             .call => |id| {
-                const args_count = state.stack.pop() orelse {
+                const args_count = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
@@ -698,7 +698,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
 
-                if (state.stack.items.len < args_count.as.int_val or args_count.as.int_val < 0) {
+                if (state.sp < args_count.as.int_val or args_count.as.int_val < 0) {
                     return .{ .err = ExecuteError.StackUnderflow };
                 }
 
@@ -714,14 +714,12 @@ const Vm = struct {
                 };
 
                 const argc = @as(usize, @intCast(args_count.as.int_val));
-                const args = state.stack.items[state.stack.items.len - argc ..];
+                const args = state.stack[state.sp - argc ..];
 
                 const res = callback.?(&info, argc, args.ptr);
 
                 for (0..argc) |_| {
-                    _ = state.stack.pop() orelse {
-                        return .{ .err = ExecuteError.StackUnderflow };
-                    };
+                    _ = state.pop();
                 }
 
                 return switch (res) {
@@ -731,9 +729,7 @@ const Vm = struct {
                 };
             },
             .pop => {
-                if (state.stack.items.len > 0) {
-                    _ = state.stack.pop();
-                }
+                _ = state.pop();
             },
         }
         return .{ .ok = {} };
@@ -1025,7 +1021,8 @@ export fn basic26_Vm_run(
 const State = struct {
     vm: *Vm,
     ip: usize = 0,
-    stack: std.ArrayList(c.basic26_Value) = .empty,
+    sp: usize = 0,
+    stack: [c.BASIC26_STACK_CAPACITY]c.basic26_Value = undefined,
     vars: std.AutoHashMapUnmanaged(c.basic26_SymbolId, c.basic26_Value) = .empty,
 
     pub inline fn init(vm: *Vm) State {
@@ -1033,8 +1030,27 @@ const State = struct {
     }
 
     pub inline fn deinit(this: *State, allocator: std.mem.Allocator) void {
-        this.stack.deinit(allocator);
         this.vars.deinit(allocator);
+    }
+
+    pub inline fn push(this: *State, value: c.basic26_Value) error{OutOfMemory}!void {
+        if (this.sp >= this.stack.len) {
+            return error.OutOfMemory;
+        }
+
+        this.stack[this.sp] = value;
+        this.sp += 1;
+    }
+
+    pub inline fn pop(this: *State) ?c.basic26_Value {
+        if (this.sp == 0) {
+            return null;
+        }
+
+        const ret = this.stack[this.sp - 1];
+        this.sp -= 1;
+
+        return ret;
     }
 };
 
@@ -1089,7 +1105,7 @@ export fn basic26_State_clear(
     const state: *State = @ptrCast(@alignCast(c_state.?));
 
     if (options.?.clear_stack) {
-        state.stack.clearRetainingCapacity();
+        state.sp = 0;
     }
 
     if (options.?.clear_vars) {
@@ -1116,6 +1132,10 @@ export fn basic26_State_set_ip(
 
     const state: *State = @ptrCast(@alignCast(c_state.?));
     state.ip = ip;
+}
+
+export fn basic26_State_get_stack_capacity() callconv(.c) usize {
+    return c.BASIC26_STACK_CAPACITY;
 }
 
 export fn basic26_State_get_var(

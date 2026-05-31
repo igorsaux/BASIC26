@@ -9,6 +9,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const stack_size = b.option(usize, "stack_size", "This constant controls the size of the inline stack array inside every basic26_State");
+
     const translate_c = b.dependency("translate_c", .{});
     const t: Translator = .init(translate_c, .{
         .c_source_file = b.path("src/basic26.h"),
@@ -16,6 +18,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .default_init = true,
     });
+
+    if (stack_size != null) {
+        t.defineCMacro("BASIC26_STACK_CAPACITY", b.fmt("{}", .{stack_size.?}));
+    }
 
     b.modules.put(b.allocator, "basic26", t.mod) catch @panic("OOM");
 

@@ -180,6 +180,19 @@ extern "C"
 #endif
 
     /**
+     * @brief Maximum number of values that fit on the execution stack.
+     *
+     * This constant controls the size of the inline stack array inside every
+     * basic26_State.
+     *
+     * @note Setting this too low will cause stack overflow errors during
+     *       script execution. Setting it too high wastes memory per State.
+     */
+#ifndef BASIC26_STACK_CAPACITY
+#define BASIC26_STACK_CAPACITY 256
+#endif
+
+    /**
      * @brief 64-bit signed integer type used by the VM.
      *
      * All integer literals in BASIC26 scripts and all integer-valued variables
@@ -686,10 +699,10 @@ extern "C"
     /**
      * @brief Gets the current instruction pointer (IP).
      *
-     * @param [in]  state  The state instance.
-     * @param [out] out_ip Receives the current IP.
+     * @param [in]  state The state instance.
+     * @param [out] out   Receives the current IP.
      */
-    BASIC26_API void BASIC26_API_CALL basic26_State_get_ip(const basic26_State *BASIC26_NONNULL state, size_t *BASIC26_NONNULL out_ip);
+    BASIC26_API void BASIC26_API_CALL basic26_State_get_ip(const basic26_State *BASIC26_NONNULL state, size_t *BASIC26_NONNULL out);
 
     /**
      * @brief Sets the instruction pointer (IP). Used for GOTO/GOSUB.
@@ -700,14 +713,25 @@ extern "C"
     BASIC26_API void BASIC26_API_CALL basic26_State_set_ip(basic26_State *BASIC26_NONNULL state, size_t ip);
 
     /**
+     * @brief Returns the stack capacity.
+     *
+     * This is the value of BASIC26_STACK_CAPACITY that the library was
+     * compiled with. It is useful for applications that link against the
+     * dynamic library and cannot inspect the compile-time constant directly.
+     *
+     * @return The stack capacity (number of slots).
+     */
+    BASIC26_API size_t BASIC26_API_CALL basic26_State_get_stack_capacity();
+
+    /**
      * @brief Reads a variable value.
      *
      * @param [in]  state     The state instance.
      * @param [in]  symbol_id The symbol ID of the variable.
-     * @param [out] out_value Receives the value.
+     * @param [out] out       Receives the value.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if variable or name is not defined.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_State_get_var(const basic26_State *BASIC26_NONNULL state, basic26_SymbolId symbol_id, basic26_Value *BASIC26_NONNULL out_value);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_State_get_var(const basic26_State *BASIC26_NONNULL state, basic26_SymbolId symbol_id, basic26_Value *BASIC26_NONNULL out);
 
     /**
      * @brief Writes a variable value. Creates the variable if it doesn't exist yet.
@@ -854,10 +878,10 @@ extern "C"
      * @param [in]  script   The script instance.
      * @param [in]  name     Pointer to the label name string.
      * @param [in]  name_len Length of the label name in bytes.
-     * @param [out] out_ip   Receives the label IP.
+     * @param [out] out      Receives the label IP.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if label doesn't exist.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_get_label(const basic26_Script *BASIC26_NONNULL script, const uint8_t *BASIC26_NONNULL name, size_t name_len, size_t *BASIC26_NONNULL out_ip);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_get_label(const basic26_Script *BASIC26_NONNULL script, const uint8_t *BASIC26_NONNULL name, size_t name_len, size_t *BASIC26_NONNULL out);
 
     /**
      * @brief Dumps the script bytecode to a human-readable string.
