@@ -305,7 +305,7 @@ const Vm = struct {
                 };
             },
             .load => |id| {
-                const val = state.vars.get(id) orelse {
+                const val = state.getVar(id) orelse {
                     return .{ .err = ExecuteError.UndefinedVariable };
                 };
 
@@ -318,11 +318,13 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const entry = state.vars.getEntry(id) orelse {
-                    return .{ .err = ExecuteError.UndefinedVariable };
+                const exists = state.setVar(this.allocator.allocator(), id, val, false) catch {
+                    return .{ .err = ExecuteError.OutOfMemory };
                 };
 
-                entry.value_ptr.* = val;
+                if (!exists) {
+                    return .{ .err = ExecuteError.UndefinedVariable };
+                }
             },
             .add => {
                 const rhs = state.pop() orelse {
@@ -1023,7 +1025,7 @@ const State = struct {
     ip: usize = 0,
     sp: usize = 0,
     stack: [c.BASIC26_STACK_CAPACITY]c.basic26_Value = undefined,
-    vars: std.AutoHashMapUnmanaged(c.basic26_SymbolId, c.basic26_Value) = .empty,
+    vars: std.ArrayList(?c.basic26_Value) = .empty,
 
     pub inline fn init(vm: *Vm) State {
         return .{ .vm = vm };
@@ -1031,6 +1033,38 @@ const State = struct {
 
     pub inline fn deinit(this: *State, allocator: std.mem.Allocator) void {
         this.vars.deinit(allocator);
+    }
+
+    pub inline fn setVar(
+        this: *State,
+        allocator: std.mem.Allocator,
+        id: c.basic26_SymbolId,
+        value: ?c.basic26_Value,
+        create: bool,
+    ) error{OutOfMemory}!bool {
+        if (id >= this.vars.items.len) {
+            if (!create) {
+                return false;
+            }
+
+            try this.vars.appendNTimes(allocator, null, id + 1 - this.vars.items.len);
+        }
+
+        if (!create and this.vars.items[id] == null) {
+            return false;
+        }
+
+        this.vars.items[id] = value;
+
+        return true;
+    }
+
+    pub inline fn getVar(this: *const State, id: c.basic26_SymbolId) ?c.basic26_Value {
+        if (id >= this.vars.items.len) {
+            return null;
+        }
+
+        return this.vars.items[id];
     }
 
     pub inline fn push(this: *State, value: c.basic26_Value) error{OutOfMemory}!void {
@@ -1066,7 +1100,9 @@ export fn basic26_State_create(
     std.debug.assert(options.?.vm != null);
 
     const vm: *Vm = @ptrCast(@alignCast(options.?.vm.?));
-    const state = vm.allocator.allocator().create(State) catch return c.BASIC26_RESULT_OUT_OF_MEMORY;
+    const state = vm.allocator.allocator().create(State) catch {
+        return c.BASIC26_RESULT_OUT_OF_MEMORY;
+    };
 
     state.* = .init(vm);
     out.?.* = @ptrCast(state);
@@ -1148,7 +1184,7 @@ export fn basic26_State_get_var(
 
     const state: *const State = @ptrCast(@alignCast(c_state.?));
 
-    out_value.?.* = state.vars.get(symbold_id) orelse {
+    out_value.?.* = state.getVar(symbold_id) orelse {
         return c.BASIC26_RESULT_NOT_FOUND;
     };
 
@@ -1165,7 +1201,7 @@ export fn basic26_State_set_var(
 
     const state: *State = @ptrCast(@alignCast(c_state.?));
 
-    state.vars.put(state.vm.allocator.allocator(), symbold_id, value.?.*) catch {
+    _ = state.setVar(state.vm.allocator.allocator(), symbold_id, value.?.*, true) catch {
         return c.BASIC26_RESULT_OUT_OF_MEMORY;
     };
 
