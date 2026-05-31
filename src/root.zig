@@ -904,7 +904,7 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
             script: *const Script,
             limits: *const c.basic26_RunLimits,
             userdata: ?*anyopaque,
-            error_out: ?*c.basic26_RuntimeErrorInfo,
+            error_out: *c.basic26_RuntimeErrorInfo,
         ) c.basic26_Result {
             if (state.ip >= script.ops.items.len) {
                 return c.BASIC26_RESULT_OK;
@@ -958,20 +958,18 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
                     .ok => {},
                     .yield => return c.BASIC26_RESULT_YIELDED,
                     .err => |err| {
-                        if (error_out) |err_out| {
-                            err_out.ip = prev_ip;
-                            err_out.code = switch (err) {
-                                ExecuteError.DivisionByZero => c.BASIC26_RUNTIME_ERROR_DIVISION_BY_ZERO,
-                                ExecuteError.TypeMismatch => c.BASIC26_RUNTIME_ERROR_TYPE_MISMATCH,
-                                ExecuteError.StackUnderflow => c.BASIC26_RUNTIME_ERROR_STACK_UNDERFLOW,
-                                ExecuteError.StackOverflow => c.BASIC26_RUNTIME_ERROR_STACK_OVERFLOW,
-                                ExecuteError.UndefinedFunction => c.BASIC26_RUNTIME_ERROR_UNDEFINED_FUNCTION,
-                                ExecuteError.UndefinedVariable => c.BASIC26_RUNTIME_ERROR_UNDEFINED_VARIABLE,
-                                ExecuteError.InvalidBitShift => c.BASIC26_RUNTIME_ERROR_INVALID_BIT_SHIFT,
-                                ExecuteError.FunctionError => c.BASIC26_RUNTIME_ERROR_FUNCTION,
-                                else => c.BASIC26_RUNTIME_ERROR_UNKNOWN,
-                            };
-                        }
+                        error_out.ip = prev_ip;
+                        error_out.code = switch (err) {
+                            ExecuteError.DivisionByZero => c.BASIC26_RUNTIME_ERROR_DIVISION_BY_ZERO,
+                            ExecuteError.TypeMismatch => c.BASIC26_RUNTIME_ERROR_TYPE_MISMATCH,
+                            ExecuteError.StackUnderflow => c.BASIC26_RUNTIME_ERROR_STACK_UNDERFLOW,
+                            ExecuteError.StackOverflow => c.BASIC26_RUNTIME_ERROR_STACK_OVERFLOW,
+                            ExecuteError.UndefinedFunction => c.BASIC26_RUNTIME_ERROR_UNDEFINED_FUNCTION,
+                            ExecuteError.UndefinedVariable => c.BASIC26_RUNTIME_ERROR_UNDEFINED_VARIABLE,
+                            ExecuteError.InvalidBitShift => c.BASIC26_RUNTIME_ERROR_INVALID_BIT_SHIFT,
+                            ExecuteError.FunctionError => c.BASIC26_RUNTIME_ERROR_FUNCTION,
+                            else => c.BASIC26_RUNTIME_ERROR_UNKNOWN,
+                        };
 
                         return c.BASIC26_RESULT_RUNTIME_ERROR;
                     },
@@ -1002,10 +1000,12 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
 export fn basic26_Vm_run(
     c_vm: ?*c.basic26_Vm,
     options: ?*const c.basic26_RunOptions,
+    error_out: ?*c.basic26_RuntimeErrorInfo,
 ) callconv(.c) c.basic26_Result {
     std.debug.assert(c_vm != null);
     std.debug.assert(options != null);
     std.debug.assert(options.?.limits != null);
+    std.debug.assert(error_out != null);
 
     const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
     const state: *State = @ptrCast(@alignCast(options.?.state.?));
@@ -1016,13 +1016,13 @@ export fn basic26_Vm_run(
     const check_time = limits.max_time_ns > 0;
 
     if (check_ops and check_time) {
-        return RunLoop(true, true).run(vm, state, script, limits, options.?.userdata, options.?.error_out);
+        return RunLoop(true, true).run(vm, state, script, limits, options.?.userdata, error_out.?);
     } else if (check_ops) {
-        return RunLoop(true, false).run(vm, state, script, limits, options.?.userdata, options.?.error_out);
+        return RunLoop(true, false).run(vm, state, script, limits, options.?.userdata, error_out.?);
     } else if (check_time) {
-        return RunLoop(false, true).run(vm, state, script, limits, options.?.userdata, options.?.error_out);
+        return RunLoop(false, true).run(vm, state, script, limits, options.?.userdata, error_out.?);
     } else {
-        return RunLoop(false, false).run(vm, state, script, limits, options.?.userdata, options.?.error_out);
+        return RunLoop(false, false).run(vm, state, script, limits, options.?.userdata, error_out.?);
     }
 }
 
@@ -2090,6 +2090,7 @@ export fn basic26_Script_compile(
 ) callconv(.c) c.basic26_Result {
     std.debug.assert(c_script != null);
     std.debug.assert(options != null);
+    std.debug.assert(error_out != null);
 
     const vm: *Vm = @ptrCast(@alignCast(options.?.vm.?));
     const script: *Script = @ptrCast(@alignCast(c_script.?));
@@ -2119,16 +2120,14 @@ export fn basic26_Script_compile(
 
         while (true) {
             const tok = lexer.next() catch |err| {
-                if (error_out) |err_info| {
-                    err_info.*.pos = line_offset + lexer.pos;
-                    err_info.*.code = switch (err) {
-                        error.BadStringLiteral => c.BASIC26_COMPILE_ERROR_BAD_STRING_LITERAL,
-                        error.BadNumberLiteral => c.BASIC26_COMPILE_ERROR_BAD_NUMBER_LITERAL,
-                        error.BadSymbolLiteral => c.BASIC26_COMPILE_ERROR_BAD_SYMBOL_LITERAL,
-                        error.OutOfMemory => c.BASIC26_COMPILE_ERROR_OUT_OF_MEMORY,
-                        else => c.BASIC26_COMPILE_ERROR_SYNTAX,
-                    };
-                }
+                error_out.?.pos = line_offset + lexer.pos;
+                error_out.?.code = switch (err) {
+                    error.BadStringLiteral => c.BASIC26_COMPILE_ERROR_BAD_STRING_LITERAL,
+                    error.BadNumberLiteral => c.BASIC26_COMPILE_ERROR_BAD_NUMBER_LITERAL,
+                    error.BadSymbolLiteral => c.BASIC26_COMPILE_ERROR_BAD_SYMBOL_LITERAL,
+                    error.OutOfMemory => c.BASIC26_COMPILE_ERROR_OUT_OF_MEMORY,
+                    else => c.BASIC26_COMPILE_ERROR_SYNTAX,
+                };
 
                 return c.BASIC26_RESULT_COMPILE_ERROR;
             };
@@ -2158,15 +2157,13 @@ export fn basic26_Script_compile(
         );
 
         if (parseLineResult) |_| {} else |err| {
-            if (error_out) |err_info| {
-                err_info.*.pos = line_offset;
-                err_info.*.code = switch (err) {
-                    error.ExpectedOp => c.BASIC26_COMPILE_ERROR_EXPECTED_OP,
-                    error.UnknownOperator => c.BASIC26_COMPILE_ERROR_UNKNOWN_OP,
-                    error.OutOfMemory => c.BASIC26_COMPILE_ERROR_OUT_OF_MEMORY,
-                    else => c.BASIC26_COMPILE_ERROR_SYNTAX,
-                };
-            }
+            error_out.?.pos = line_offset;
+            error_out.?.code = switch (err) {
+                error.ExpectedOp => c.BASIC26_COMPILE_ERROR_EXPECTED_OP,
+                error.UnknownOperator => c.BASIC26_COMPILE_ERROR_UNKNOWN_OP,
+                error.OutOfMemory => c.BASIC26_COMPILE_ERROR_OUT_OF_MEMORY,
+                else => c.BASIC26_COMPILE_ERROR_SYNTAX,
+            };
 
             return c.BASIC26_RESULT_COMPILE_ERROR;
         }
@@ -2175,10 +2172,8 @@ export fn basic26_Script_compile(
     // Resolve pending goto jumps
     for (ps.pending_jumps.items) |pj| {
         const ip = script.labels.get(pj.label_name) orelse {
-            if (error_out) |err_info| {
-                err_info.*.pos = 0;
-                err_info.*.code = c.BASIC26_COMPILE_ERROR_UNKNOWN_LABEL;
-            }
+            error_out.?.pos = 0;
+            error_out.?.code = c.BASIC26_COMPILE_ERROR_UNKNOWN_LABEL;
 
             return c.BASIC26_RESULT_COMPILE_ERROR;
         };
@@ -2322,7 +2317,7 @@ test "Undefined variable" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE = "a = 10";
 
@@ -2333,10 +2328,10 @@ test "Undefined variable" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_RUNTIME_ERROR,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -2344,11 +2339,10 @@ test "Undefined variable" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
-    try expectStatus(c.BASIC26_RUNTIME_ERROR_UNDEFINED_VARIABLE, c_run_error.code);
+    try expectStatus(c.BASIC26_RUNTIME_ERROR_UNDEFINED_VARIABLE, run_error.code);
 }
 
 test "Basic arithmetics" {
@@ -2372,7 +2366,7 @@ test "Basic arithmetics" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 10.0
@@ -2392,7 +2386,7 @@ test "Basic arithmetics" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
@@ -2404,7 +2398,7 @@ test "Basic arithmetics" {
     try setVar(c_vm.?, c_state.?, "g", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
     try setVar(c_vm.?, c_state.?, "h", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -2412,8 +2406,7 @@ test "Basic arithmetics" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     const a_value = try getVar(c_vm.?, c_state.?, "a");
@@ -2463,7 +2456,7 @@ test "Boolean operators" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 1 AND 1
@@ -2480,7 +2473,7 @@ test "Boolean operators" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
@@ -2489,7 +2482,7 @@ test "Boolean operators" {
     try setVar(c_vm.?, c_state.?, "d", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
     try setVar(c_vm.?, c_state.?, "e", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -2497,8 +2490,7 @@ test "Boolean operators" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     const a_value = try getVar(c_vm.?, c_state.?, "a");
@@ -2536,7 +2528,7 @@ test "Bitwise operators" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 3 & 1
@@ -2561,10 +2553,10 @@ test "Bitwise operators" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -2572,8 +2564,7 @@ test "Bitwise operators" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
@@ -2597,7 +2588,7 @@ test "Comparison operators" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 10 == 10
@@ -2626,10 +2617,10 @@ test "Comparison operators" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -2637,8 +2628,7 @@ test "Comparison operators" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
@@ -2664,7 +2654,7 @@ test "If Else flow" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 0
@@ -2692,10 +2682,10 @@ test "If Else flow" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -2703,8 +2693,7 @@ test "If Else flow" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     try std.testing.expectEqual(10, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
@@ -2724,7 +2713,7 @@ test "While loop flow" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\i = 0
@@ -2742,10 +2731,10 @@ test "While loop flow" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -2753,8 +2742,7 @@ test "While loop flow" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     try std.testing.expectEqual(5, (try getVar(c_vm.?, c_state.?, "i")).as.int_val);
@@ -2773,7 +2761,7 @@ test "Goto statement" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 1
@@ -2790,13 +2778,13 @@ test "Goto statement" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
     try setVar(c_vm.?, c_state.?, "b", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -2804,8 +2792,7 @@ test "Goto statement" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
@@ -2825,7 +2812,7 @@ test "Division by zero runtime error" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE = "a = 10 / 0";
     try expectStatus(
@@ -2835,12 +2822,12 @@ test "Division by zero runtime error" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_RUNTIME_ERROR,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -2848,10 +2835,9 @@ test "Division by zero runtime error" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
-    try expectStatus(c.BASIC26_RUNTIME_ERROR_DIVISION_BY_ZERO, c_run_error.code);
+    try expectStatus(c.BASIC26_RUNTIME_ERROR_DIVISION_BY_ZERO, run_error.code);
 }
 
 test "Native negative values, NaN and Inf parsing" {
@@ -2873,7 +2859,7 @@ test "Native negative values, NaN and Inf parsing" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = -42
@@ -2892,7 +2878,7 @@ test "Native negative values, NaN and Inf parsing" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
@@ -2903,7 +2889,7 @@ test "Native negative values, NaN and Inf parsing" {
     try setVar(c_vm.?, c_state.?, "f", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
     try setVar(c_vm.?, c_state.?, "g", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -2911,8 +2897,7 @@ test "Native negative values, NaN and Inf parsing" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     const a_val = try getVar(c_vm.?, c_state.?, "a");
@@ -3002,7 +2987,7 @@ test "Functions" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 10
@@ -3019,7 +3004,7 @@ test "Functions" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
@@ -3045,7 +3030,7 @@ test "Functions" {
 
     var ud: Callback.UserData = .{};
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -3053,8 +3038,7 @@ test "Functions" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = &ud,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     try std.testing.expectEqual(true, ud.was_called);
@@ -3080,7 +3064,7 @@ test "Symbol literal" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 10
@@ -3094,13 +3078,13 @@ test "Symbol literal" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
     try setVar(c_vm.?, c_state.?, "b", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -3108,8 +3092,7 @@ test "Symbol literal" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     const a_val = try getVar(c_vm.?, c_state.?, "a");
@@ -3138,7 +3121,7 @@ test "Operator precedence: mul before add/sub" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 2 + 3 * 4
@@ -3154,7 +3137,7 @@ test "Operator precedence: mul before add/sub" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
@@ -3162,7 +3145,7 @@ test "Operator precedence: mul before add/sub" {
     try setVar(c_vm.?, c_state.?, "c", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
     try setVar(c_vm.?, c_state.?, "d", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -3170,8 +3153,7 @@ test "Operator precedence: mul before add/sub" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     try std.testing.expectEqual(14, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
@@ -3193,7 +3175,7 @@ test "Operator precedence: arithmetic before comparison" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 5 * 5 <= 30
@@ -3209,7 +3191,7 @@ test "Operator precedence: arithmetic before comparison" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
@@ -3217,7 +3199,7 @@ test "Operator precedence: arithmetic before comparison" {
     try setVar(c_vm.?, c_state.?, "c", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
     try setVar(c_vm.?, c_state.?, "d", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -3225,8 +3207,7 @@ test "Operator precedence: arithmetic before comparison" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
@@ -3248,7 +3229,7 @@ test "Operator precedence: modulo before equality" {
     try expectStatus(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
     defer c.basic26_Script_destroy(c_script.?, c_vm.?);
 
-    var c_compile_error: c.basic26_CompileErrorInfo = .{};
+    var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
         \\a = 6 % 3 == 0
@@ -3263,14 +3244,14 @@ test "Operator precedence: modulo before equality" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
-        }, &c_compile_error),
+        }, &compile_error),
     );
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
     try setVar(c_vm.?, c_state.?, "b", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
     try setVar(c_vm.?, c_state.?, "c", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
-    var c_run_error: c.basic26_RuntimeErrorInfo = .{};
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectStatus(
         c.BASIC26_RESULT_OK,
         c.basic26_Vm_run(c_vm.?, &.{
@@ -3278,8 +3259,7 @@ test "Operator precedence: modulo before equality" {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &c_run_error,
-        }),
+        }, &run_error),
     );
 
     try std.testing.expectEqual(1, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
@@ -3328,7 +3308,6 @@ fn testOne(context: void, smith: *std.testing.Smith) !void {
             .script = c_script.?,
             .limits = &.{},
             .userdata = null,
-            .error_out = &runtime_err,
-        });
+        }, &runtime_err);
     }
 }

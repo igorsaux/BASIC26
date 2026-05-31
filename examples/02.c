@@ -246,8 +246,7 @@ double run_benchmark(int iterations)
                                          .time_check_interval = 0,
                                      },
                                      .userdata = NULL,
-                                     .error_out = &run_err,
-                                 }) == BASIC26_RESULT_OK);
+                                 }, &run_err) == BASIC26_RESULT_OK);
     }
 
     const long long end = now_ns();
@@ -287,8 +286,7 @@ int main(void)
                                  .script = script,
                                  .limits = &(basic26_RunLimits){0},
                                  .userdata = NULL,
-                                 .error_out = &run_err,
-                             }) == BASIC26_RESULT_OK);
+                             }, &run_err) == BASIC26_RESULT_OK);
 
     const int64_t result = get_int_var(state, symbol_b);
 
@@ -316,8 +314,7 @@ int main(void)
                                      .script = script,
                                      .limits = &(basic26_RunLimits){0},
                                      .userdata = NULL,
-                                     .error_out = &run_err,
-                                 }) == BASIC26_RESULT_OK);
+                                 }, &run_err) == BASIC26_RESULT_OK);
     }
 
     printf("Warmup complete.\n\n");
@@ -355,8 +352,7 @@ int main(void)
                                      .script = script,
                                      .limits = &(basic26_RunLimits){0},
                                      .userdata = NULL,
-                                     .error_out = &last_run_err,
-                                 }) == BASIC26_RESULT_OK);
+                                 }, &last_run_err) == BASIC26_RESULT_OK);
         const long long iter_end = now_ns();
 
         per_iter_times[i] = (double)(iter_end - iter_start);

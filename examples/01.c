@@ -692,8 +692,7 @@ int main(int argc, const char **argv)
                                                            .max_time_ns = 0,
                                                        },
                                                        .userdata = NULL,
-                                                       .error_out = &runtime_err_info,
-                                                   });
+                                                   }, &runtime_err_info);
 
         if (result == BASIC26_RESULT_OK)
         {

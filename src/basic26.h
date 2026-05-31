@@ -622,7 +622,6 @@ extern "C"
         const basic26_Script *BASIC26_NONNULL script;         /**< [in] Script to run. */
         const basic26_RunLimits *BASIC26_NONNULL limits;      /**< [in] Execution limits. */
         void *BASIC26_NULLABLE userdata;                      /**< [in] User context passed to callbacks. */
-        basic26_RuntimeErrorInfo *BASIC26_NULLABLE error_out; /**< [out] Receives runtime error info. */
     } basic26_RunOptions;
 
     /**
@@ -633,12 +632,13 @@ extern "C"
     /**
      * @brief Executes a script.
      *
-     * @param [in] vm      The VM instance.
-     * @param [in] options Execution options.
+     * @param [in] vm          The VM instance.
+     * @param [in] options     Execution options.
+     * @param [out] error_out  Receives runtime error info.
      * @return BASIC26_RESULT_OK on completion, BASIC26_RESULT_YIELDED if suspended,
      *         BASIC26_RESULT_OUT_OF_LIMITS if limits exceeded, or BASIC26_RESULT_RUNTIME_ERROR on error.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Vm_run(basic26_Vm *BASIC26_NONNULL vm, const basic26_RunOptions *BASIC26_NONNULL options);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Vm_run(basic26_Vm *BASIC26_NONNULL vm, const basic26_RunOptions *BASIC26_NONNULL options, basic26_RuntimeErrorInfo *BASIC26_NONNULL error_out);
 
     /**
      * @brief Options for creating an execution state.
@@ -866,11 +866,11 @@ extern "C"
      *
      * @param [in]  script     The script instance to compile into.
      * @param [in]  options    Compilation options.
-     * @param [out] error_out  Receives error info on failure. May be NULL.
+     * @param [out] error_out  Receives error info on failure.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails,
      *         BASIC26_RESULT_COMPILE_ERROR on syntax or semantic errors.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_compile(basic26_Script *BASIC26_NONNULL script, const basic26_CompileOptions *BASIC26_NONNULL options, basic26_CompileErrorInfo *BASIC26_NULLABLE error_out);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_compile(basic26_Script *BASIC26_NONNULL script, const basic26_CompileOptions *BASIC26_NONNULL options, basic26_CompileErrorInfo *BASIC26_NONNULL error_out);
 
     /**
      * @brief Gets the Instruction Pointer (IP) of a label by its name.
