@@ -618,10 +618,10 @@ extern "C"
      */
     typedef struct basic26_RunOptions
     {
-        basic26_State *BASIC26_NONNULL state;                 /**< [in] Execution state. */
-        const basic26_Script *BASIC26_NONNULL script;         /**< [in] Script to run. */
-        const basic26_RunLimits *BASIC26_NONNULL limits;      /**< [in] Execution limits. */
-        void *BASIC26_NULLABLE userdata;                      /**< [in] User context passed to callbacks. */
+        basic26_State *BASIC26_NONNULL state;            /**< [in] Execution state. */
+        const basic26_Script *BASIC26_NONNULL script;    /**< [in] Script to run. */
+        const basic26_RunLimits *BASIC26_NONNULL limits; /**< [in] Execution limits. */
+        void *BASIC26_NULLABLE userdata;                 /**< [in] User context passed to callbacks. */
     } basic26_RunOptions;
 
     /**
@@ -746,6 +746,36 @@ extern "C"
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
     BASIC26_API basic26_Result BASIC26_API_CALL basic26_State_set_var(basic26_State *BASIC26_NONNULL state, basic26_SymbolId symbol_id, const basic26_Value *BASIC26_NONNULL value);
+
+    /**
+     * @brief Iterates over the defined variables in a state.
+     *
+     * Returns the variables defined in the state one by one, in ascending
+     * order of symbol id.
+     *
+     * To start a new iteration, pass NULL for `prev`. The function then writes
+     * the id of the first defined variable to `it`. To advance the iterator,
+     * pass `&it` (a pointer to the id returned by the previous call) on
+     * subsequent calls.
+     *
+     * Typical usage:
+     * @code
+     *   const basic26_SymbolId *prev = NULL;
+     *   basic26_SymbolId it = 0;
+     *   while (basic26_State_var_next(state, prev, &it)) {
+     *       prev = &it;
+     *       // use 'it' here
+     *   }
+     * @endcode
+     *
+     * @param [in]  state  The state instance.
+     * @param [in]  prev   Pointer to the id returned by the previous call, or
+     *                     NULL to start a new iteration from the beginning.
+     * @param [out] it     Receives the id of the next defined variable.
+     * @return true if a defined variable was written to `it`, false if the
+     *         iteration has no more variables to yield.
+     */
+    BASIC26_API bool BASIC26_API_CALL basic26_State_var_next(const basic26_State *BASIC26_NONNULL state, const basic26_SymbolId *BASIC26_NULLABLE prev, basic26_SymbolId *BASIC26_NONNULL it);
 
     /**
      * @brief Creates a new, empty compiled script instance.
