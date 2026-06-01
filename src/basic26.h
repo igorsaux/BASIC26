@@ -37,18 +37,18 @@
  * and lines starting with `//` are ignored. The supported constructs are:
  *
  * ### Data Types
- * - `INT`    -- 64-bit signed integer (e.g. `42`, `-7`)
- * - `FLOAT`  -- 64-bit double-precision floating point (e.g. `3.14`, `NAN`, `INF`, `-INF`)
- * - `STRING` -- interned UTF-8 string literal (e.g. `"hello"`)
- * - `SYMBOL` -- identifier literal prefixed with `$` (e.g. `$foo`). Symbols are used to pass
+ * - `INT`    - 64-bit signed integer (e.g. `42`, `-7`)
+ * - `FLOAT`  - 64-bit double-precision floating point (e.g. `3.14`, `NAN`, `INF`, `-INF`)
+ * - `STRING` - interned UTF-8 string literal (e.g. `"hello"`)
+ * - `SYMBOL` - identifier literal prefixed with `$` (e.g. `$foo`). Symbols are used to pass
  *               identifier names to native functions without resolving them as variables.
- * - `NULL`   -- the null value
- * - `OBJECT` -- opaque host pointer, only created and consumed by native callbacks
+ * - `NULL`   - the null value
+ * - `OBJECT` - opaque host pointer, only created and consumed by native callbacks
  *
  * ### Variables and Assignment
  * Variables are NOT created implicitly by the interpreter. All variables must be explicitly
  * created by the host application via `basic26_State_set_var()` before the script references them.
- * The interpreter does not allocate memory for variables on its own -- variable creation is entirely
+ * The interpreter does not allocate memory for variables on its own - variable creation is entirely
  * the host's responsibility. A script can assign to an existing variable with any value type:
  * @code
  *   x = 10
@@ -80,9 +80,9 @@
  * runtime error.
  *
  * ### Control Flow
- * - `IF expr ... ELSE ... ENDIF` -- conditional branching. The `ELSE` branch is optional.
- * - `WHILE expr ... ENDWHILE`   -- loop that evaluates the condition before each iteration.
- * - `GOTO label`                -- unconditional jump to a label defined elsewhere as `label:`.
+ * - `IF expr ... ELSE ... ENDIF` - conditional branching. The `ELSE` branch is optional.
+ * - `WHILE expr ... ENDWHILE`    - loop that evaluates the condition before each iteration.
+ * - `GOTO label`                 - unconditional jump to a label defined elsewhere as `label:`.
  *
  * ### Function Calls
  * All functions are native callbacks registered by the host application. A call takes the form:
@@ -730,7 +730,7 @@ extern "C"
      * @param [in]  state     The state instance.
      * @param [in]  symbol_id The symbol ID of the variable.
      * @param [out] out       Receives the value.
-     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if variable or name is not defined.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if variable is not defined.
      */
     BASIC26_API basic26_Result BASIC26_API_CALL basic26_State_get_var(const basic26_State *BASIC26_NONNULL state, basic26_SymbolId symbol_id, basic26_Value *BASIC26_NONNULL out);
 
@@ -738,7 +738,7 @@ extern "C"
      * @brief Writes a variable value. Creates the variable if it doesn't exist yet.
      *
      * This is the primary mechanism for creating variables. The interpreter does not
-     * create variables implicitly on assignment -- the host must create them via this
+     * create variables implicitly on assignment - the host must create them via this
      * function before the script attempts to read or write them.
      *
      * @param [in] state     The state instance.
@@ -747,6 +747,16 @@ extern "C"
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
     BASIC26_API basic26_Result BASIC26_API_CALL basic26_State_set_var(basic26_State *BASIC26_NONNULL state, basic26_SymbolId symbol_id, const basic26_Value *BASIC26_NONNULL value);
+
+    /**
+     * @brief Unsets a variable.
+     * 
+     * This function makes the variable undefined like it does not exist.
+     * 
+     * @param [in] state The state instance.
+     * @param [in] symbol_id The symbol ID of the variable.
+     */
+    BASIC26_API void BASIC26_API_CALL basic26_State_unset_var(basic26_State *BASIC26_NONNULL state, basic26_SymbolId symbol_id);
 
     /**
      * @brief Iterates over the defined variables in a state.

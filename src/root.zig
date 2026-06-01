@@ -1078,6 +1078,14 @@ const State = struct {
         return this.vars.items[id];
     }
 
+    pub inline fn unsetVar(this: *State, id: c.basic26_SymbolId) void {
+        if (id >= this.vars.items.len) {
+            return;
+        }
+
+        this.vars.items[id].type = c.BASIC26_VALUE_TYPE_FORCE_32BIT;
+    }
+
     pub inline fn push(this: *State, value: c.basic26_Value) error{OutOfMemory}!void {
         if (this.sp >= this.stack.len) {
             return error.OutOfMemory;
@@ -1217,6 +1225,17 @@ export fn basic26_State_set_var(
     };
 
     return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_State_unset_var(
+    c_state: ?*c.basic26_State,
+    symbold_id: c.basic26_SymbolId,
+) callconv(.c) void {
+    std.debug.assert(c_state != null);
+
+    const state: *State = @ptrCast(@alignCast(c_state.?));
+
+    state.unsetVar(symbold_id);
 }
 
 export fn basic26_State_var_next(
