@@ -75,6 +75,7 @@ pub fn build(b: *std.Build) void {
         .file = b.path("examples/01.c"),
         .language = .c,
     });
+    example_01.root_module.addCMacro("BASIC26_DYNAMIC", "1");
     example_01.root_module.addIncludePath(b.path("src/"));
     example_01.root_module.linkLibrary(basic26_dynamic_lib);
 
@@ -93,6 +94,7 @@ pub fn build(b: *std.Build) void {
         .file = b.path("examples/02.c"),
         .language = .c,
     });
+    example_01.root_module.addCMacro("BASIC26_STATIC", "1");
     example_02.root_module.addIncludePath(b.path("src/"));
     example_02.root_module.linkLibrary(basic26_static_lib);
 
