@@ -6,12 +6,11 @@ BASIC26 exposes a C API so that host applications can compile and execute simple
 
 ## Features
 
+- **Mechanisms, Not Policies** - the VM exposes only raw primitives without built-in data structures, high-level semantics or implicit behaviour.
 - **Embeddable C API** - compile scripts and execute them from any C-compatible host application.
-- **Stack-based VM** - simple, proven architecture with a bytecode compiler and interpreter.
 - **Sandboxed execution** - configurable limits on opcode count and wall-clock time prevent runaway scripts.
 - **Yield/resume** - native callbacks can suspend execution (`BASIC26_FUNCTION_RESULT_YIELD`) and the host can resume later, enabling async patterns in event-driven applications.
 - **Custom allocators** - plug in your own memory allocation callbacks to integrate with custom memory pools or track allocations.
-- **String interning** - all strings and identifiers are interned for fast equality comparisons by ID.
 - **No external dependencies** - the library is self-contained and links only against libc for the examples.
 - **Cross-platform** - builds on Linux, macOS, Windows, and freestanding targets (with a failing allocator fallback).
 
