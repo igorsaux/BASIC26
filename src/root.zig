@@ -719,6 +719,7 @@ const Vm = struct {
                     .state = @ptrCast(state),
                     .script = @ptrCast(script),
                     .userdata = userdata,
+                    .function_name = id,
                 };
 
                 const argc = @as(usize, @intCast(args_count.as.int_val));

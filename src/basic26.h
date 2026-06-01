@@ -362,6 +362,7 @@ extern "C"
         basic26_State *BASIC26_NONNULL state;         /**< [in] The current execution state. */
         const basic26_Script *BASIC26_NONNULL script; /**< [in] The script being executed. */
         void *BASIC26_NULLABLE userdata;              /**< [in] User-provided context. */
+        basic26_SymbolId function_name;               /**< [in] Symbol ID of the called function. */
     } basic26_CallInfo;
 
     /**
