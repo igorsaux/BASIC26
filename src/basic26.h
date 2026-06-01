@@ -9,7 +9,7 @@
  * @brief BASIC26 Virtual Machine API.
  *
  * @details
- * BASIC26 is a lightweight, embeddable scripting language and virtual machine implemented in Zig.
+ * BASIC26 is a lightweight, embeddable scripting language and virtual machine.
  * It exposes a C API so that host applications can compile and execute simple scripts at runtime.
  * The language is line-oriented, inspired by classic BASIC, and is designed for use cases such as
  * game modding, configuration logic, automation rules, and other scenarios where a small, safe,
