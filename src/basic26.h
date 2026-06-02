@@ -37,13 +37,17 @@
  * and lines starting with `//` are ignored. The supported constructs are:
  *
  * ### Data Types
- * - `INT`    - 64-bit signed integer (e.g. `42`, `-7`)
- * - `FLOAT`  - 64-bit double-precision floating point (e.g. `3.14`, `NAN`, `INF`, `-INF`)
- * - `STRING` - interned UTF-8 string literal (e.g. `"hello"`)
- * - `SYMBOL` - identifier literal prefixed with `$` (e.g. `$foo`). Symbols are used to pass
+ * - `INT`     - 64-bit signed integer (e.g. `42`, `-7`)
+ * - `FLOAT`   - 64-bit double-precision floating point (e.g. `3.14`, `NAN`, `INF`, `-INF`)
+ * - `STRING`  - interned UTF-8 string literal (e.g. `"hello"`)
+ * - `SYMBOL`  - identifier literal prefixed with `$` (e.g. `$foo`). Symbols are used to pass
  *               identifier names to native functions without resolving them as variables.
- * - `NULL`   - the null value
- * - `OBJECT` - opaque host pointer, only created and consumed by native callbacks
+ * - `ADDRESS` - label address literal prefixed with `@` (e.g. `@my_label`). Addresses represent
+ *               the instruction pointer (IP) of a label in the compiled bytecode. They are resolved
+ *               at compile time and can be used for computed jumps or passing jump targets to native
+ *               functions. Addresses support all comparison operators (==, !=, <, >, <=, >=).
+ * - `NULL`    - the null value
+ * - `OBJECT`  - opaque host pointer, only created and consumed by native callbacks
  *
  * ### Variables and Assignment
  * Variables are NOT created implicitly by the interpreter. All variables must be explicitly
@@ -98,8 +102,8 @@
  * @code
  *   my_label:
  * @endcode
- * They are used as targets for `GOTO` statements. Forward references are allowed; the compiler
- * resolves them after all lines have been parsed.
+ * They are used as targets for `GOTO` statements and `@address` literals. Forward references are
+ * allowed; the compiler resolves them after all lines have been parsed.
  *
  * ## Typical Usage Pattern
  *
@@ -286,12 +290,13 @@ extern "C"
      */
     typedef enum basic26_ValueType
     {
-        BASIC26_VALUE_TYPE_NULL = 0,   /**< Null value. */
-        BASIC26_VALUE_TYPE_INT = 1,    /**< 64-bit signed integer. */
-        BASIC26_VALUE_TYPE_FLOAT = 2,  /**< 64-bit floating-point number. */
-        BASIC26_VALUE_TYPE_STRING = 3, /**< String (stored as an ID). */
-        BASIC26_VALUE_TYPE_SYMBOL = 4, /**< Symbol (stored as an ID). */
-        BASIC26_VALUE_TYPE_OBJECT = 5, /**< Object (stored as a pointer). */
+        BASIC26_VALUE_TYPE_NULL = 0,    /**< Null value. */
+        BASIC26_VALUE_TYPE_INT = 1,     /**< 64-bit signed integer. */
+        BASIC26_VALUE_TYPE_FLOAT = 2,   /**< 64-bit floating-point number. */
+        BASIC26_VALUE_TYPE_STRING = 3,  /**< String (stored as an ID). */
+        BASIC26_VALUE_TYPE_SYMBOL = 4,  /**< Symbol (stored as an ID). */
+        BASIC26_VALUE_TYPE_OBJECT = 5,  /**< Object (stored as a pointer). */
+        BASIC26_VALUE_TYPE_ADDRESS = 6, /**< Label address (stored as an IP). */
         BASIC26_VALUE_TYPE_FORCE_32BIT = 0x7FFFFFFF,
     } basic26_ValueType;
 
@@ -320,6 +325,7 @@ extern "C"
             basic26_StringId string_id;        /**< String ID (if type is STRING). */
             basic26_SymbolId symbol_id;        /**< Symbol ID (if type is SYMBOL). */
             void *BASIC26_NULLABLE object_ptr; /**< Object pointer (if type is OBJECT). */
+            size_t address_val;                /**< Address value / label IP (if type is ADDRESS). */
         } as;                                  /**< Union holding the actual value. */
     } basic26_Value;
 
@@ -750,9 +756,9 @@ extern "C"
 
     /**
      * @brief Unsets a variable.
-     * 
+     *
      * This function makes the variable undefined like it does not exist.
-     * 
+     *
      * @param [in] state The state instance.
      * @param [in] symbol_id The symbol ID of the variable.
      */

@@ -49,6 +49,15 @@ const Value = struct {
         };
     }
 
+    pub inline fn fromAddress(value: usize) c.basic26_Value {
+        return .{
+            .type = c.BASIC26_VALUE_TYPE_ADDRESS,
+            .as = .{
+                .address_val = value,
+            },
+        };
+    }
+
     pub inline fn fromUndefined() c.basic26_Value {
         return .{
             .type = c.BASIC26_VALUE_TYPE_FORCE_32BIT,
@@ -151,6 +160,7 @@ const Op = union(enum) {
     push_float: c.basic26_FloatType,
     push_string: c.basic26_StringId,
     push_symbol: c.basic26_SymbolId,
+    push_address: usize,
     push_null,
     load: c.basic26_SymbolId,
     store: c.basic26_SymbolId,
@@ -302,6 +312,11 @@ const Vm = struct {
             },
             .push_symbol => {
                 state.push(Value.fromSymbol(op.push_symbol)) catch {
+                    return .{ .err = ExecuteError.StackOverflow };
+                };
+            },
+            .push_address => {
+                state.push(Value.fromAddress(op.push_address)) catch {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
@@ -507,6 +522,16 @@ const Vm = struct {
                         .eq => lhs.as.object_ptr == rhs.as.object_ptr,
                         .neq => lhs.as.object_ptr != rhs.as.object_ptr,
                         else => return .{ .err = ExecuteError.TypeMismatch },
+                    };
+                } else if (lhs.type == c.BASIC26_VALUE_TYPE_ADDRESS and rhs.type == c.BASIC26_VALUE_TYPE_ADDRESS) {
+                    res = switch (op) {
+                        .eq => lhs.as.address_val == rhs.as.address_val,
+                        .neq => lhs.as.address_val != rhs.as.address_val,
+                        .lt => lhs.as.address_val < rhs.as.address_val,
+                        .lte => lhs.as.address_val <= rhs.as.address_val,
+                        .gt => lhs.as.address_val > rhs.as.address_val,
+                        .gte => lhs.as.address_val >= rhs.as.address_val,
+                        else => unreachable,
                     };
                 } else {
                     return .{ .err = ExecuteError.TypeMismatch };
@@ -1319,6 +1344,7 @@ const Token = union(enum) {
     float: c.basic26_FloatType,
     string_literal: []const u8,
     symbol_literal: []const u8,
+    address_literal: []const u8,
     op: []const u8,
     lparen,
     rparen,
@@ -1432,10 +1458,11 @@ const Lexer = struct {
         }
 
         const is_symbol_literal = ch == '$' and this.pos + 1 < this.src.len;
+        const is_address_literal = ch == '@' and this.pos + 1 < this.src.len;
 
         // Identifier, keyword, or special float literal (NAN / INF)
-        if (is_symbol_literal or (std.ascii.isAlphabetic(ch) or ch == '_')) {
-            if (is_symbol_literal) {
+        if (is_address_literal or is_symbol_literal or (std.ascii.isAlphabetic(ch) or ch == '_')) {
+            if (is_symbol_literal or is_address_literal) {
                 this.pos += 1;
             }
 
@@ -1468,7 +1495,9 @@ const Lexer = struct {
 
             this.expect_value = false;
 
-            if (is_symbol_literal) {
+            if (is_address_literal) {
+                return .{ .address_literal = word };
+            } else if (is_symbol_literal) {
                 return .{ .symbol_literal = word };
             } else {
                 return .{ .ident = word };
@@ -1580,7 +1609,8 @@ const Lexer = struct {
                 chr == ')' or
                 chr == '"' or
                 chr == ',' or
-                chr == ':')
+                chr == ':' or
+                chr == '@')
             {
                 break;
             }
@@ -1706,6 +1736,9 @@ const Script = struct {
                     const str = this.strings.str_map.get(op.push_symbol).?;
                     try writer.writer.print("PUSH_SYMBOL \"{s}\"\n", .{str});
                 },
+                .push_address => {
+                    try writer.writer.print("PUSH_ADDRESS {d}\n", .{op.push_address});
+                },
                 .push_null => {
                     try writer.writer.print("PUSH_NULL\n", .{});
                 },
@@ -1806,6 +1839,7 @@ const ControlStmt = union(enum) {
 const PendingJump = struct {
     op_index: usize,
     label_name: []const u8,
+    kind: enum { jump, push_address },
 };
 
 const ParserState = struct {
@@ -1858,6 +1892,18 @@ const ParserState = struct {
                     const id = try script.parseSymbol(allocator, tok.symbol_literal, limits);
 
                     try ops.append(allocator, .{ .push_symbol = id });
+                    idx.* += 1;
+                },
+                .address_literal => {
+                    const jump_idx = script.ops.items.len;
+
+                    try script.ops.append(allocator, .{ .push_address = 0 });
+                    try this.pending_jumps.append(allocator, .{
+                        .op_index = jump_idx,
+                        .label_name = tok.address_literal,
+                        .kind = .push_address,
+                    });
+
                     idx.* += 1;
                 },
                 .ident => {
@@ -2030,7 +2076,11 @@ const ParserState = struct {
                     const jump_idx = script.ops.items.len;
 
                     try script.ops.append(allocator, .{ .jump = 0 });
-                    try this.pending_jumps.append(allocator, .{ .op_index = jump_idx, .label_name = label_name });
+                    try this.pending_jumps.append(allocator, .{
+                        .op_index = jump_idx,
+                        .label_name = label_name,
+                        .kind = .jump,
+                    });
 
                     i.* += 1;
                 },
@@ -2229,7 +2279,10 @@ export fn basic26_Script_compile(
             return c.BASIC26_RESULT_COMPILE_ERROR;
         };
 
-        script.ops.items[pj.op_index].jump = ip;
+        switch (pj.kind) {
+            .jump => script.ops.items[pj.op_index].jump = ip,
+            .push_address => script.ops.items[pj.op_index].push_address = ip,
+        }
     }
 
     return c.BASIC26_RESULT_OK;
@@ -3385,6 +3438,67 @@ test "Variable iteration" {
     try std.testing.expectEqual(true, a_found);
     try std.testing.expectEqual(true, b_found);
     try std.testing.expectEqual(true, c_found);
+}
+
+test "Address literal" {
+    var c_vm: ?*c.basic26_Vm = null;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer c.basic26_Vm_destroy(c_vm.?);
+
+    var c_state: ?*c.basic26_State = null;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+
+    var c_script: ?*c.basic26_Script = null;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
+    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+
+    var compile_error: c.basic26_CompileErrorInfo = .{};
+
+    const SOURCE =
+        \\my_label:
+        \\a = @my_label
+        \\b = @end_label
+        \\end_label:
+    ;
+
+    try expectEnum(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Script_compile(c_script.?, &.{
+            .vm = c_vm.?,
+            .source = SOURCE.ptr,
+            .source_len = SOURCE.len,
+            .limits = &.{},
+        }, &compile_error),
+    );
+
+    try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "b", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
+    try expectEnum(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Vm_run(c_vm.?, &.{
+            .state = c_state.?,
+            .script = c_script.?,
+            .limits = &.{},
+            .userdata = null,
+        }, &run_error),
+    );
+
+    var my_label_ip: usize = 0;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_get_label(c_script.?, "my_label", "my_label".len, &my_label_ip));
+
+    var end_label_ip: usize = 0;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_get_label(c_script.?, "end_label", "end_label".len, &end_label_ip));
+
+    const a_val = try getVar(c_vm.?, c_state.?, "a");
+    try std.testing.expect(a_val.type == c.BASIC26_VALUE_TYPE_ADDRESS);
+    try std.testing.expectEqual(my_label_ip, a_val.as.address_val);
+
+    const b_val = try getVar(c_vm.?, c_state.?, "b");
+    try std.testing.expect(b_val.type == c.BASIC26_VALUE_TYPE_ADDRESS);
+    try std.testing.expectEqual(end_label_ip, b_val.as.address_val);
 }
 
 // Does not work for now (at least on macOS)
