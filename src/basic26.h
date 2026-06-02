@@ -868,7 +868,6 @@ extern "C"
         BASIC26_COMPILE_ERROR_TOO_BIG_INT = 7,        /**< Integer literal too large. */
         BASIC26_COMPILE_ERROR_SYNTAX = 8,             /**< General syntax error. */
         BASIC26_COMPILE_ERROR_UNKNOWN_LABEL = 9,      /**< Reference to undefined label. */
-        BASIC26_COMPILE_ERROR_OUT_OF_MEMORY = 10,     /**< Out of memory during compilation. */
         BASIC26_COMPILE_ERROR_FORCE_32BIT = 0x7FFFFFFF,
     } basic26_CompileError;
 

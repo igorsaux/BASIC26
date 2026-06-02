@@ -2176,7 +2176,7 @@ export fn basic26_Script_compile(
                     error.BadStringLiteral => c.BASIC26_COMPILE_ERROR_BAD_STRING_LITERAL,
                     error.BadNumberLiteral => c.BASIC26_COMPILE_ERROR_BAD_NUMBER_LITERAL,
                     error.BadSymbolLiteral => c.BASIC26_COMPILE_ERROR_BAD_SYMBOL_LITERAL,
-                    error.OutOfMemory => c.BASIC26_COMPILE_ERROR_OUT_OF_MEMORY,
+                    error.OutOfMemory => return c.BASIC26_RESULT_OUT_OF_MEMORY,
                     else => c.BASIC26_COMPILE_ERROR_SYNTAX,
                 };
 
@@ -2212,7 +2212,7 @@ export fn basic26_Script_compile(
             error_out.?.code = switch (err) {
                 error.ExpectedOp => c.BASIC26_COMPILE_ERROR_EXPECTED_OP,
                 error.UnknownOperator => c.BASIC26_COMPILE_ERROR_UNKNOWN_OP,
-                error.OutOfMemory => c.BASIC26_COMPILE_ERROR_OUT_OF_MEMORY,
+                error.OutOfMemory => return c.BASIC26_RESULT_OUT_OF_MEMORY,
                 else => c.BASIC26_COMPILE_ERROR_SYNTAX,
             };
 
