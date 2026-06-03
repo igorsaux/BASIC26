@@ -1857,6 +1857,7 @@ const Script = struct {
 const ControlStmt = union(enum) {
     if_chain: struct {
         last_jump_if_false_idx: usize,
+        last_jump_if_false_resolved: bool,
         end_jumps: std.ArrayList(usize),
     },
     while_stmt: struct { start_idx: usize, jump_idx: usize },
@@ -2068,6 +2069,7 @@ const ParserState = struct {
                     try this.ctrl_stack.append(allocator, .{
                         .if_chain = .{
                             .last_jump_if_false_idx = jump_idx,
+                            .last_jump_if_false_resolved = false,
                             .end_jumps = .empty,
                         },
                     });
@@ -2101,11 +2103,13 @@ const ParserState = struct {
 
                         try this.ctrl_stack.append(allocator, .{ .if_chain = .{
                             .last_jump_if_false_idx = jump_idx,
+                            .last_jump_if_false_resolved = false,
                             .end_jumps = ctrl.if_chain.end_jumps,
                         } });
                     } else {
                         try this.ctrl_stack.append(allocator, .{ .if_chain = .{
                             .last_jump_if_false_idx = ctrl.if_chain.last_jump_if_false_idx,
+                            .last_jump_if_false_resolved = true,
                             .end_jumps = ctrl.if_chain.end_jumps,
                         } });
                     }
@@ -2133,6 +2137,7 @@ const ParserState = struct {
 
                     try this.ctrl_stack.append(allocator, .{ .if_chain = .{
                         .last_jump_if_false_idx = jump_idx,
+                        .last_jump_if_false_resolved = false,
                         .end_jumps = ctrl.if_chain.end_jumps,
                     } });
                 },
@@ -2145,7 +2150,7 @@ const ParserState = struct {
                         return Script.ParseError.SyntaxError;
                     }
 
-                    if (ctrl.if_chain.end_jumps.items.len == 0) {
+                    if (!ctrl.if_chain.last_jump_if_false_resolved) {
                         script.ops.items[ctrl.if_chain.last_jump_if_false_idx].jump_if_false = script.ops.items.len;
                     }
 
@@ -2992,6 +2997,63 @@ test "If Else flow" {
 
     try std.testing.expectEqual(20, (try getVar(c_vm.?, c_state.?, "e")).as.int_val);
     try std.testing.expectEqual(30, (try getVar(c_vm.?, c_state.?, "f")).as.int_val);
+}
+
+test "While If ElseIf" {
+    var c_vm: ?*c.basic26_Vm = null;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer c.basic26_Vm_destroy(c_vm.?);
+
+    var c_state: ?*c.basic26_State = null;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+
+    var c_script: ?*c.basic26_Script = null;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
+    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+
+    var compile_error: c.basic26_CompileErrorInfo = .{};
+
+    const SOURCE =
+        \\WHILE i < 3
+        \\
+        \\IF i == 1
+        \\ELSEIF i == 2
+        \\ENDIF
+        \\
+        \\i = i + 1
+        \\ENDWHILE
+    ;
+
+    try setVar(c_vm.?, c_state.?, "i", .{
+        .type = c.BASIC26_VALUE_TYPE_INT,
+        .as = .{
+            .int_val = 0,
+        },
+    });
+
+    try expectEnum(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Script_compile(c_script.?, &.{
+            .vm = c_vm.?,
+            .source = SOURCE.ptr,
+            .source_len = SOURCE.len,
+            .limits = &.{},
+        }, &compile_error),
+    );
+
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
+    try expectEnum(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Vm_run(c_vm.?, &.{
+            .state = c_state.?,
+            .script = c_script.?,
+            .limits = &.{},
+            .userdata = null,
+        }, &run_error),
+    );
+
+    try std.testing.expectEqual(3, (try getVar(c_vm.?, c_state.?, "i")).as.int_val);
 }
 
 test "While loop flow" {
