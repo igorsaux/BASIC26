@@ -2105,11 +2105,11 @@ const ParserState = struct {
                 .goto => {
                     i.* += 1;
 
-                    if (i.* >= tokens.len or tokens[i.*].kind != .ident) {
+                    if (i.* >= tokens.len or tokens[i.*].kind != .address_literal) {
                         return Script.ParseError.SyntaxError;
                     }
 
-                    const label_name = tokens[i.*].kind.ident;
+                    const label_name = tokens[i.*].kind.address_literal;
                     const jump_idx = script.ops.items.len;
 
                     try script.appendOp(allocator, .{ .jump = 0 }, line_offset + tokens[i.*].pos);
@@ -2927,7 +2927,7 @@ test "Goto statement" {
 
     const SOURCE =
         \\a = 1
-        \\GOTO skip
+        \\GOTO @skip
         \\a = 2
         \\skip:
         \\b = a
