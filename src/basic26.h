@@ -930,6 +930,16 @@ extern "C"
     BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_get_label(const basic26_Script *BASIC26_NONNULL script, const uint8_t *BASIC26_NONNULL name, size_t name_len, size_t *BASIC26_NONNULL out);
 
     /**
+     * @brief Gets the position in the source code of the instruction.
+     *
+     * @param [in] script The script instance.
+     * @param [in] ip Instruction pointer.
+     * @param [out] out Receives the byte position in the source code.
+     * @return Receives the on success, BASIC26_RESULT_NOT_FOUND if the instruction pointer is out of the range.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_get_op_pos(const basic26_Script *BASIC26_NONNULL script, size_t ip, size_t *BASIC26_NONNULL out);
+
+    /**
      * @brief Dumps the script bytecode to a human-readable string.
      *
      * @param [in]  script   The script instance.

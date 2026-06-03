@@ -975,10 +975,7 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
                     ops_since_time_check += 1;
                 }
 
-                const is_call_op: bool = switch (op) {
-                    .call => true,
-                    else => false,
-                };
+                const is_call_op = op == .call;
 
                 switch (vm.execute(state, script, userdata, op)) {
                     .ok => {},
@@ -1338,7 +1335,19 @@ const keyword_map = std.StaticStringMap(Keyword).initComptime(.{
     .{ "NULL", .null },
 });
 
-const Token = union(enum) {
+const Token = struct {
+    kind: TokenKind,
+    pos: usize,
+
+    pub inline fn init(kind: TokenKind, pos: usize) Token {
+        return .{
+            .kind = kind,
+            .pos = pos,
+        };
+    }
+};
+
+const TokenKind = union(enum) {
     ident: []const u8,
     int: c.basic26_IntType,
     float: c.basic26_FloatType,
@@ -1401,7 +1410,7 @@ const Lexer = struct {
         while (this.pos < this.src.len and std.ascii.isWhitespace(this.src[this.pos])) : (this.pos += 1) {}
     }
 
-    inline fn parseFloatLiteral(this: *Lexer, word: []const u8) ?Token {
+    inline fn parseFloatLiteral(this: *Lexer, word: []const u8) ?TokenKind {
         if (!special_float_set.has(word)) {
             return null;
         }
@@ -1418,7 +1427,7 @@ const Lexer = struct {
         this.skipWhitespace();
 
         if (this.pos >= this.src.len) {
-            return .eof;
+            return .init(.eof, this.pos);
         }
 
         // Skip line comments (// ...)
@@ -1428,7 +1437,7 @@ const Lexer = struct {
             this.skipWhitespace();
 
             if (this.pos >= this.src.len) {
-                return .eof;
+                return .init(.eof, this.pos);
             }
         }
 
@@ -1454,7 +1463,7 @@ const Lexer = struct {
 
             this.expect_value = false;
 
-            return .{ .string_literal = this.src[start..this.pos] };
+            return .init(.{ .string_literal = this.src[start..this.pos] }, start);
         }
 
         const is_symbol_literal = ch == '$' and this.pos + 1 < this.src.len;
@@ -1476,7 +1485,7 @@ const Lexer = struct {
 
             // NAN and INF are float literals, not keywords
             if (this.parseFloatLiteral(word)) |tok| {
-                return tok;
+                return .init(tok, start);
             }
 
             if (keyword_map.get(word)) |kw| {
@@ -1485,22 +1494,22 @@ const Lexer = struct {
                 if (kw == .@"and" or kw == .@"or" or kw == .not) {
                     this.expect_value = true;
 
-                    return .{ .op = word };
+                    return .init(.{ .op = word }, start);
                 }
 
                 this.expect_value = true;
 
-                return .{ .keyword = kw };
+                return .init(.{ .keyword = kw }, start);
             }
 
             this.expect_value = false;
 
             if (is_address_literal) {
-                return .{ .address_literal = word };
+                return .init(.{ .address_literal = word }, start);
             } else if (is_symbol_literal) {
-                return .{ .symbol_literal = word };
+                return .init(.{ .symbol_literal = word }, start);
             } else {
-                return .{ .ident = word };
+                return .init(.{ .ident = word }, start);
             }
         }
 
@@ -1529,7 +1538,7 @@ const Lexer = struct {
                         unreachable;
                     };
 
-                    return .{ .float = val };
+                    return .init(.{ .float = val }, peek_start);
                 }
             }
         }
@@ -1558,13 +1567,13 @@ const Lexer = struct {
                     return Script.ParseError.BadNumberLiteral;
                 };
 
-                return .{ .float = val };
+                return .init(.{ .float = val }, start);
             } else {
                 const val = std.fmt.parseInt(c.basic26_IntType, num_str, 10) catch {
                     return Script.ParseError.BadNumberLiteral;
                 };
 
-                return .{ .int = val };
+                return .init(.{ .int = val }, start);
             }
         }
 
@@ -1573,28 +1582,28 @@ const Lexer = struct {
             this.pos += 1;
             this.expect_value = true;
 
-            return .lparen;
+            return .init(.lparen, this.pos - 1);
         }
 
         if (ch == ')') {
             this.pos += 1;
             this.expect_value = false;
 
-            return .rparen;
+            return .init(.rparen, this.pos - 1);
         }
 
         if (ch == ',') {
             this.pos += 1;
             this.expect_value = true;
 
-            return .comma;
+            return .init(.comma, this.pos - 1);
         }
 
         if (ch == ':') {
             this.pos += 1;
             this.expect_value = true;
 
-            return .colon;
+            return .init(.colon, this.pos - 1);
         }
 
         // Operator sequence (e.g. +, -, ==, !=, <=, >=, <<, >>, etc.)
@@ -1624,7 +1633,7 @@ const Lexer = struct {
 
         this.expect_value = true;
 
-        return .{ .op = this.src[start..this.pos] };
+        return .init(.{ .op = this.src[start..this.pos] }, start);
     }
 };
 
@@ -1647,6 +1656,7 @@ inline fn isValidSymbol(bytes: []const u8) bool {
 const Script = struct {
     strings: *Strings,
     ops: std.ArrayList(Op) = .empty,
+    ops_source_map: std.ArrayList(usize) = .empty,
     labels: std.StringHashMapUnmanaged(usize) = .empty,
     parser_state: ParserState = .{},
 
@@ -1656,6 +1666,7 @@ const Script = struct {
 
     pub inline fn deinit(this: *Script, allocator: std.mem.Allocator) void {
         this.ops.deinit(allocator);
+        this.ops_source_map.deinit(allocator);
         this.labels.deinit(allocator);
         this.parser_state.deinit(allocator);
     }
@@ -1672,6 +1683,13 @@ const Script = struct {
         ExpectedOp,
         TooManyArgs,
     };
+
+    pub inline fn appendOp(this: *Script, allocator: std.mem.Allocator, op: Op, pos: usize) error{OutOfMemory}!void {
+        try this.ops.append(allocator, op);
+        errdefer _ = this.ops.pop();
+
+        try this.ops_source_map.append(allocator, pos);
+    }
 
     pub inline fn parseString(
         this: *Script,
@@ -1843,8 +1861,20 @@ const PendingJump = struct {
 };
 
 const ParserState = struct {
+    const OpPair = struct {
+        op: []const u8,
+        pos: usize,
+
+        pub inline fn init(op: []const u8, pos: usize) OpPair {
+            return .{
+                .op = op,
+                .pos = pos,
+            };
+        }
+    };
+
     tokens: std.ArrayList(Token) = .empty,
-    op_stack: std.ArrayList([]const u8) = .empty,
+    op_stack: std.ArrayList(OpPair) = .empty,
     ctrl_stack: std.ArrayList(ControlStmt) = .empty,
     pending_jumps: std.ArrayList(PendingJump) = .empty,
 
@@ -1866,63 +1896,63 @@ const ParserState = struct {
         tokens: []const Token,
         idx: *usize,
         limits: *const c.basic26_ScriptLimits,
-        ops: *std.ArrayList(Op),
+        line_offset: usize,
     ) Script.ParseError!void {
         this.op_stack.clearRetainingCapacity();
 
         while (idx.* < tokens.len) {
             const tok = tokens[idx.*];
 
-            switch (tok) {
+            switch (tok.kind) {
                 .int => {
-                    try ops.append(allocator, .{ .push_int = tok.int });
+                    try script.appendOp(allocator, .{ .push_int = tok.kind.int }, line_offset + tok.pos);
                     idx.* += 1;
                 },
                 .float => {
-                    try ops.append(allocator, .{ .push_float = tok.float });
+                    try script.appendOp(allocator, .{ .push_float = tok.kind.float }, line_offset + tok.pos);
                     idx.* += 1;
                 },
                 .string_literal => {
-                    const id = try script.parseString(allocator, tok.string_literal, limits);
+                    const id = try script.parseString(allocator, tok.kind.string_literal, limits);
 
-                    try ops.append(allocator, .{ .push_string = id });
+                    try script.appendOp(allocator, .{ .push_string = id }, line_offset + tok.pos);
                     idx.* += 1;
                 },
                 .symbol_literal => {
-                    const id = try script.parseSymbol(allocator, tok.symbol_literal, limits);
+                    const id = try script.parseSymbol(allocator, tok.kind.symbol_literal, limits);
 
-                    try ops.append(allocator, .{ .push_symbol = id });
+                    try script.appendOp(allocator, .{ .push_symbol = id }, line_offset + tok.pos);
                     idx.* += 1;
                 },
                 .address_literal => {
                     const jump_idx = script.ops.items.len;
 
-                    try script.ops.append(allocator, .{ .push_address = 0 });
+                    try script.appendOp(allocator, .{ .push_address = 0 }, line_offset + tok.pos);
                     try this.pending_jumps.append(allocator, .{
                         .op_index = jump_idx,
-                        .label_name = tok.address_literal,
+                        .label_name = tok.kind.address_literal,
                         .kind = .push_address,
                     });
 
                     idx.* += 1;
                 },
                 .ident => {
-                    const id = try script.parseSymbol(allocator, tok.ident, limits);
+                    const id = try script.parseSymbol(allocator, tok.kind.ident, limits);
 
-                    try ops.append(allocator, .{ .load = id });
+                    try script.appendOp(allocator, .{ .load = id }, line_offset + tok.pos);
                     idx.* += 1;
                 },
                 .lparen => {
-                    try this.op_stack.append(allocator, "(");
+                    try this.op_stack.append(allocator, .init("(", line_offset + tok.pos));
                     idx.* += 1;
                 },
                 .rparen => {
-                    while (this.op_stack.items.len > 0 and !std.mem.eql(u8, this.op_stack.items[this.op_stack.items.len - 1], "(")) {
-                        const info = operator_map.get(this.op_stack.pop().?) orelse {
+                    while (this.op_stack.items.len > 0 and !std.mem.eql(u8, this.op_stack.items[this.op_stack.items.len - 1].op, "(")) {
+                        const info = operator_map.get(this.op_stack.pop().?.op) orelse {
                             return Script.ParseError.UnknownOperator;
                         };
 
-                        try ops.append(allocator, info.op);
+                        try script.appendOp(allocator, info.op, line_offset + tok.pos);
                     }
 
                     if (this.op_stack.items.len == 0) {
@@ -1933,40 +1963,40 @@ const ParserState = struct {
                     idx.* += 1;
                 },
                 .op => {
-                    const info = operator_map.get(tok.op) orelse {
+                    const info = operator_map.get(tok.kind.op) orelse {
                         break;
                     };
 
                     while (this.op_stack.items.len > 0) {
                         const top = this.op_stack.items[this.op_stack.items.len - 1];
 
-                        if (std.mem.eql(u8, top, "(")) {
+                        if (std.mem.eql(u8, top.op, "(")) {
                             break;
                         }
 
-                        const top_info = operator_map.get(top) orelse {
+                        const top_info = operator_map.get(top.op) orelse {
                             break;
                         };
 
                         if ((info.right_assoc and info.precedence < top_info.precedence) or
                             (!info.right_assoc and info.precedence <= top_info.precedence))
                         {
-                            const popped_info = operator_map.get(this.op_stack.pop().?) orelse {
+                            const popped_info = operator_map.get(this.op_stack.pop().?.op) orelse {
                                 return Script.ParseError.UnknownOperator;
                             };
 
-                            try ops.append(allocator, popped_info.op);
+                            try script.appendOp(allocator, popped_info.op, line_offset + tok.pos);
                         } else {
                             break;
                         }
                     }
 
-                    try this.op_stack.append(allocator, tok.op);
+                    try this.op_stack.append(allocator, .init(tok.kind.op, line_offset + tok.pos));
                     idx.* += 1;
                 },
                 .keyword => {
-                    if (tok.keyword == .null) {
-                        try ops.append(allocator, .push_null);
+                    if (tok.kind.keyword == .null) {
+                        try script.appendOp(allocator, .push_null, line_offset + tok.pos);
                         idx.* += 1;
                     } else {
                         break;
@@ -1980,15 +2010,15 @@ const ParserState = struct {
         while (this.op_stack.items.len > 0) {
             const op_str = this.op_stack.pop().?;
 
-            if (std.mem.eql(u8, op_str, "(")) {
+            if (std.mem.eql(u8, op_str.op, "(")) {
                 return Script.ParseError.BadSymbolLiteral;
             }
 
-            const info = operator_map.get(op_str) orelse {
+            const info = operator_map.get(op_str.op) orelse {
                 return Script.ParseError.UnknownOperator;
             };
 
-            try ops.append(allocator, info.op);
+            try script.appendOp(allocator, info.op, op_str.pos);
         }
     }
 
@@ -1999,21 +2029,26 @@ const ParserState = struct {
         tokens: []const Token,
         i: *usize,
         limits: *const c.basic26_ScriptLimits,
+        line_offset: usize,
     ) Script.ParseError!void {
+        if (tokens.len == 0) {
+            return Script.ParseError.SyntaxError;
+        }
+
         // Label definition: `name:`
-        if (tokens[0] == .ident and tokens.len > 1 and tokens[1] == .colon) {
-            try script.labels.put(allocator, tokens[0].ident, script.ops.items.len);
+        if (tokens[0].kind == .ident and tokens.len > 1 and tokens[1].kind == .colon) {
+            try script.labels.put(allocator, tokens[0].kind.ident, script.ops.items.len);
 
             i.* += 2;
-        } else if (tokens[0] == .keyword) {
-            switch (tokens[0].keyword) {
+        } else if (tokens[0].kind == .keyword) {
+            switch (tokens[0].kind.keyword) {
                 .@"if" => {
                     i.* += 1;
 
-                    try this.parseExpr(allocator, script, tokens, i, limits, &script.ops);
+                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
 
                     const jump_idx = script.ops.items.len;
-                    try script.ops.append(allocator, .{ .jump_if_false = 0 });
+                    try script.appendOp(allocator, .{ .jump_if_false = 0 }, line_offset + tokens[0].pos);
                     try this.ctrl_stack.append(allocator, .{ .if_stmt = .{ .jump_idx = jump_idx } });
                 },
                 .@"else" => {
@@ -2027,7 +2062,7 @@ const ParserState = struct {
 
                     const jump_end_idx = script.ops.items.len;
 
-                    try script.ops.append(allocator, .{ .jump = 0 });
+                    try script.appendOp(allocator, .{ .jump = 0 }, line_offset + tokens[0].pos);
                     script.ops.items[ctrl.if_stmt.jump_idx].jump_if_false = script.ops.items.len;
                     try this.ctrl_stack.append(allocator, .{ .else_stmt = .{ .jump_idx = jump_end_idx } });
                 },
@@ -2046,11 +2081,11 @@ const ParserState = struct {
                     const start_idx = script.ops.items.len;
                     i.* += 1;
 
-                    try this.parseExpr(allocator, script, tokens, i, limits, &script.ops);
+                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
 
                     const jump_idx = script.ops.items.len;
 
-                    try script.ops.append(allocator, .{ .jump_if_false = 0 });
+                    try script.appendOp(allocator, .{ .jump_if_false = 0 }, line_offset + tokens[0].pos);
                     try this.ctrl_stack.append(allocator, .{ .while_stmt = .{ .start_idx = start_idx, .jump_idx = jump_idx } });
                 },
                 .endwhile => {
@@ -2062,20 +2097,20 @@ const ParserState = struct {
                         return Script.ParseError.SyntaxError;
                     }
 
-                    try script.ops.append(allocator, .{ .jump = ctrl.while_stmt.start_idx });
+                    try script.appendOp(allocator, .{ .jump = ctrl.while_stmt.start_idx }, line_offset + tokens[0].pos);
                     script.ops.items[ctrl.while_stmt.jump_idx].jump_if_false = script.ops.items.len;
                 },
                 .goto => {
                     i.* += 1;
 
-                    if (i.* >= tokens.len or tokens[i.*] != .ident) {
+                    if (i.* >= tokens.len or tokens[i.*].kind != .ident) {
                         return Script.ParseError.SyntaxError;
                     }
 
-                    const label_name = tokens[i.*].ident;
+                    const label_name = tokens[i.*].kind.ident;
                     const jump_idx = script.ops.items.len;
 
-                    try script.ops.append(allocator, .{ .jump = 0 });
+                    try script.appendOp(allocator, .{ .jump = 0 }, line_offset + tokens[i.*].pos);
                     try this.pending_jumps.append(allocator, .{
                         .op_index = jump_idx,
                         .label_name = label_name,
@@ -2086,28 +2121,28 @@ const ParserState = struct {
                 },
                 else => return Script.ParseError.SyntaxError,
             }
-        } else if (tokens[0] == .ident) {
-            if (i.* + 1 < tokens.len and tokens[i.* + 1] == .op and std.mem.eql(u8, tokens[i.* + 1].op, "=")) {
+        } else if (tokens[0].kind == .ident) {
+            if (i.* + 1 < tokens.len and tokens[i.* + 1].kind == .op and std.mem.eql(u8, tokens[i.* + 1].kind.op, "=")) {
                 // Assignment: `ident = expr`
-                const id = try script.parseSymbol(allocator, tokens[0].ident, limits);
+                const id = try script.parseSymbol(allocator, tokens[0].kind.ident, limits);
 
                 i.* += 2;
 
-                try this.parseExpr(allocator, script, tokens, i, limits, &script.ops);
-                try script.ops.append(allocator, .{ .store = id });
+                try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
+                try script.appendOp(allocator, .{ .store = id }, line_offset + tokens[0].pos);
             } else {
                 // Function call: `ident expr, expr, ...`
-                const id = try script.parseSymbol(allocator, tokens[0].ident, limits);
+                const id = try script.parseSymbol(allocator, tokens[0].kind.ident, limits);
                 var args_count: usize = 0;
 
                 i.* += 1;
 
-                while (i.* < tokens.len and tokens[i.*] != .eof) {
-                    try this.parseExpr(allocator, script, tokens, i, limits, &script.ops);
+                while (i.* < tokens.len and tokens[i.*].kind != .eof) {
+                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
                     args_count += 1;
 
-                    if (i.* < tokens.len and tokens[i.*] != .eof) {
-                        if (tokens[i.*] == .comma) {
+                    if (i.* < tokens.len and tokens[i.*].kind != .eof) {
+                        if (tokens[i.*].kind == .comma) {
                             i.* += 1;
                         } else {
                             return Script.ParseError.SyntaxError;
@@ -2119,17 +2154,17 @@ const ParserState = struct {
                     return Script.ParseError.TooManyArgs;
                 }
 
-                try script.ops.append(allocator, .{ .push_int = @intCast(args_count) });
-                try script.ops.append(allocator, .{ .call = id });
+                try script.appendOp(allocator, .{ .push_int = @intCast(args_count) }, line_offset + tokens[0].pos);
+                try script.appendOp(allocator, .{ .call = id }, line_offset + tokens[0].pos);
             }
-        } else if (tokens[0] == .symbol_literal) {
+        } else if (tokens[0].kind == .symbol_literal) {
             if (i.* + 1 < tokens.len) {
                 return Script.ParseError.SyntaxError;
             }
 
-            const id = try script.strings.getOrPut(allocator, tokens[0].symbol_literal);
+            const id = try script.strings.getOrPut(allocator, tokens[0].kind.symbol_literal);
 
-            try script.ops.append(allocator, .{ .push_symbol = id });
+            try script.appendOp(allocator, .{ .push_symbol = id }, line_offset + tokens[0].pos);
         }
     }
 };
@@ -2198,6 +2233,7 @@ export fn basic26_Script_compile(
     const alloc = vm.allocator.allocator();
 
     script.ops.clearRetainingCapacity();
+    script.ops_source_map.clearRetainingCapacity();
     script.labels.clearRetainingCapacity();
 
     var ps = &script.parser_state;
@@ -2237,7 +2273,7 @@ export fn basic26_Script_compile(
                 return c.BASIC26_RESULT_OUT_OF_MEMORY;
             };
 
-            if (tok == .eof) {
+            if (tok.kind == .eof) {
                 break;
             }
         }
@@ -2255,6 +2291,7 @@ export fn basic26_Script_compile(
             ps.tokens.items,
             &idx,
             options.?.limits.?,
+            line_offset,
         );
 
         if (parseLineResult) |_| {} else |err| {
@@ -2292,11 +2329,11 @@ export fn basic26_Script_get_label(
     c_script: ?*const c.basic26_Script,
     name: ?[*]const u8,
     name_len: usize,
-    out_ip: ?*usize,
+    out: ?*usize,
 ) callconv(.c) c.basic26_Result {
     std.debug.assert(c_script != null);
     std.debug.assert(name != null);
-    std.debug.assert(out_ip != null);
+    std.debug.assert(out != null);
 
     const script: *const Script = @ptrCast(@alignCast(c_script.?));
 
@@ -2304,7 +2341,26 @@ export fn basic26_Script_get_label(
         return c.BASIC26_RESULT_NOT_FOUND;
     };
 
-    out_ip.?.* = ip;
+    out.?.* = ip;
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_get_op_pos(
+    c_script: ?*const c.basic26_Script,
+    ip: usize,
+    out: ?*usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+    std.debug.assert(out != null);
+
+    const script: *const Script = @ptrCast(@alignCast(c_script.?));
+
+    if (ip >= script.ops_source_map.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    out.?.* = script.ops_source_map.items[ip];
 
     return c.BASIC26_RESULT_OK;
 }
@@ -3499,6 +3555,58 @@ test "Address literal" {
     const b_val = try getVar(c_vm.?, c_state.?, "b");
     try std.testing.expect(b_val.type == c.BASIC26_VALUE_TYPE_ADDRESS);
     try std.testing.expectEqual(end_label_ip, b_val.as.address_val);
+}
+
+test "Get OP pos" {
+    var c_vm: ?*c.basic26_Vm = null;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer c.basic26_Vm_destroy(c_vm.?);
+
+    var c_state: ?*c.basic26_State = null;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+
+    var c_script: ?*c.basic26_Script = null;
+    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
+    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+
+    var compile_error: c.basic26_CompileErrorInfo = .{};
+
+    const SOURCE =
+        \\a = 1.0
+        \\b = a == 1
+    ;
+
+    try expectEnum(
+        c.BASIC26_RESULT_OK,
+        c.basic26_Script_compile(c_script.?, &.{
+            .vm = c_vm.?,
+            .source = SOURCE.ptr,
+            .source_len = SOURCE.len,
+            .limits = &.{},
+        }, &compile_error),
+    );
+
+    try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "b", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
+    try expectEnum(
+        c.BASIC26_RESULT_RUNTIME_ERROR,
+        c.basic26_Vm_run(c_vm.?, &.{
+            .state = c_state.?,
+            .script = c_script.?,
+            .limits = &.{},
+            .userdata = null,
+        }, &run_error),
+    );
+
+    try expectEnum(c.BASIC26_RUNTIME_ERROR_TYPE_MISMATCH, run_error.code);
+
+    var pos: usize = 0;
+    _ = c.basic26_Script_get_op_pos(c_script.?, run_error.ip, &pos);
+
+    try std.testing.expectEqual(14, pos);
 }
 
 // Does not work for now (at least on macOS)
