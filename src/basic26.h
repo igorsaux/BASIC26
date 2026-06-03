@@ -85,8 +85,21 @@
  *
  * ### Control Flow
  * - `IF expr ... ELSE ... ENDIF` - conditional branching. The `ELSE` branch is optional.
+ *   Multiple conditions can be chained using `ELSE IF expr` (two keywords) or `ELSEIF expr`
+ *   (single keyword). Only a single `ENDIF` is required to close the entire chain. Example:
+ *   @code
+ *     IF x == 1
+ *       y = 10
+ *     ELSE IF x == 2
+ *       y = 20
+ *     ELSEIF x == 3
+ *       y = 30
+ *     ELSE
+ *       y = 40
+ *     ENDIF
+ *   @endcode
  * - `WHILE expr ... ENDWHILE`    - loop that evaluates the condition before each iteration.
- * - `GOTO label`                 - unconditional jump to a label defined elsewhere as `label:`.
+ * - `GOTO @label`                 - unconditional jump to a label defined elsewhere as `label:`.
  *
  * ### Function Calls
  * All functions are native callbacks registered by the host application. A call takes the form:

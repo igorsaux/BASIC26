@@ -1314,6 +1314,7 @@ export fn basic26_Script_create(
 const Keyword = enum {
     @"if",
     @"else",
+    elseif,
     endif,
     @"while",
     endwhile,
@@ -1327,6 +1328,7 @@ const Keyword = enum {
 const keyword_map = std.StaticStringMap(Keyword).initComptime(.{
     .{ "IF", .@"if" },
     .{ "ELSE", .@"else" },
+    .{ "ELSEIF", .elseif },
     .{ "ENDIF", .endif },
     .{ "WHILE", .@"while" },
     .{ "ENDWHILE", .endwhile },
@@ -1851,8 +1853,10 @@ const Script = struct {
 };
 
 const ControlStmt = union(enum) {
-    if_stmt: struct { jump_idx: usize },
-    else_stmt: struct { jump_idx: usize },
+    if_chain: struct {
+        last_jump_if_false_idx: usize,
+        end_jumps: std.ArrayList(usize),
+    },
     while_stmt: struct { start_idx: usize, jump_idx: usize },
 };
 
@@ -1887,6 +1891,13 @@ const ParserState = struct {
     pub fn deinit(this: *ParserState, allocator: std.mem.Allocator) void {
         this.tokens.deinit(allocator);
         this.op_stack.deinit(allocator);
+
+        for (this.ctrl_stack.items) |*item| {
+            if (item.* == .if_chain) {
+                item.if_chain.end_jumps.deinit(allocator);
+            }
+        }
+
         this.ctrl_stack.deinit(allocator);
         this.pending_jumps.deinit(allocator);
     }
@@ -2051,33 +2062,96 @@ const ParserState = struct {
 
                     const jump_idx = script.ops.items.len;
                     try script.appendOp(allocator, .{ .jump_if_false = 0 }, line_offset + tokens[0].pos);
-                    try this.ctrl_stack.append(allocator, .{ .if_stmt = .{ .jump_idx = jump_idx } });
+
+                    try this.ctrl_stack.append(allocator, .{
+                        .if_chain = .{
+                            .last_jump_if_false_idx = jump_idx,
+                            .end_jumps = .empty,
+                        },
+                    });
                 },
                 .@"else" => {
-                    const ctrl = this.ctrl_stack.pop() orelse {
+                    var ctrl = this.ctrl_stack.pop() orelse {
                         return Script.ParseError.SyntaxError;
                     };
 
-                    if (ctrl != .if_stmt) {
+                    if (ctrl != .if_chain) {
+                        return Script.ParseError.SyntaxError;
+                    }
+
+                    const is_else_if = i.* + 1 < tokens.len and
+                        tokens[i.* + 1].kind == .keyword and
+                        tokens[i.* + 1].kind.keyword == .@"if";
+
+                    const jump_end_idx = script.ops.items.len;
+                    try script.appendOp(allocator, .{ .jump = 0 }, line_offset + tokens[0].pos);
+                    try ctrl.if_chain.end_jumps.append(allocator, jump_end_idx);
+
+                    script.ops.items[ctrl.if_chain.last_jump_if_false_idx].jump_if_false = script.ops.items.len;
+
+                    if (is_else_if) {
+                        i.* += 2;
+
+                        try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
+
+                        const jump_idx = script.ops.items.len;
+                        try script.appendOp(allocator, .{ .jump_if_false = 0 }, line_offset + tokens[1].pos);
+
+                        try this.ctrl_stack.append(allocator, .{ .if_chain = .{
+                            .last_jump_if_false_idx = jump_idx,
+                            .end_jumps = ctrl.if_chain.end_jumps,
+                        } });
+                    } else {
+                        try this.ctrl_stack.append(allocator, .{ .if_chain = .{
+                            .last_jump_if_false_idx = ctrl.if_chain.last_jump_if_false_idx,
+                            .end_jumps = ctrl.if_chain.end_jumps,
+                        } });
+                    }
+                },
+                .elseif => {
+                    var ctrl = this.ctrl_stack.pop() orelse {
+                        return Script.ParseError.SyntaxError;
+                    };
+
+                    if (ctrl != .if_chain) {
                         return Script.ParseError.SyntaxError;
                     }
 
                     const jump_end_idx = script.ops.items.len;
-
                     try script.appendOp(allocator, .{ .jump = 0 }, line_offset + tokens[0].pos);
-                    script.ops.items[ctrl.if_stmt.jump_idx].jump_if_false = script.ops.items.len;
-                    try this.ctrl_stack.append(allocator, .{ .else_stmt = .{ .jump_idx = jump_end_idx } });
+                    try ctrl.if_chain.end_jumps.append(allocator, jump_end_idx);
+
+                    script.ops.items[ctrl.if_chain.last_jump_if_false_idx].jump_if_false = script.ops.items.len;
+
+                    i.* += 1;
+                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
+
+                    const jump_idx = script.ops.items.len;
+                    try script.appendOp(allocator, .{ .jump_if_false = 0 }, line_offset + tokens[0].pos);
+
+                    try this.ctrl_stack.append(allocator, .{ .if_chain = .{
+                        .last_jump_if_false_idx = jump_idx,
+                        .end_jumps = ctrl.if_chain.end_jumps,
+                    } });
                 },
                 .endif => {
-                    const ctrl = this.ctrl_stack.pop() orelse {
+                    var ctrl = this.ctrl_stack.pop() orelse {
                         return Script.ParseError.SyntaxError;
                     };
 
-                    switch (ctrl) {
-                        .if_stmt => script.ops.items[ctrl.if_stmt.jump_idx].jump_if_false = script.ops.items.len,
-                        .else_stmt => script.ops.items[ctrl.else_stmt.jump_idx].jump = script.ops.items.len,
-                        else => return Script.ParseError.SyntaxError,
+                    if (ctrl != .if_chain) {
+                        return Script.ParseError.SyntaxError;
                     }
+
+                    if (ctrl.if_chain.end_jumps.items.len == 0) {
+                        script.ops.items[ctrl.if_chain.last_jump_if_false_idx].jump_if_false = script.ops.items.len;
+                    }
+
+                    for (ctrl.if_chain.end_jumps.items) |jump_idx| {
+                        script.ops.items[jump_idx].jump = script.ops.items.len;
+                    }
+
+                    ctrl.if_chain.end_jumps.deinit(allocator);
                 },
                 .@"while" => {
                     const start_idx = script.ops.items.len;
@@ -2832,10 +2906,60 @@ test "If Else flow" {
         \\ELSE
         \\  b = 20
         \\ENDIF
+        \\
+        \\c = 0
+        \\IF 0
+        \\  c = 10
+        \\ELSE IF 1
+        \\  c = 20
+        \\ELSE
+        \\  c = 30
+        \\ENDIF
+        \\
+        \\d = 0
+        \\IF 0
+        \\  d = 10
+        \\ELSEIF 0
+        \\  d = 20
+        \\ELSEIF 1
+        \\  d = 30
+        \\ELSE
+        \\  d = 40
+        \\ENDIF
+        \\
+        \\e = 0
+        \\IF 1
+        \\  IF 0
+        \\    e = 10
+        \\  ELSE
+        \\    e = 20
+        \\  ENDIF
+        \\ELSE
+        \\  e = 30
+        \\ENDIF
+        \\
+        \\f = 0
+        \\IF 0
+        \\  f = 10
+        \\ELSEIF 1
+        \\  IF 0
+        \\    f = 20
+        \\  ELSEIF 1
+        \\    f = 30
+        \\  ELSE
+        \\    f = 40
+        \\  ENDIF
+        \\ELSE
+        \\  f = 50
+        \\ENDIF
     ;
 
     try setVar(c_vm.?, c_state.?, "a", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
     try setVar(c_vm.?, c_state.?, "b", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "c", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "d", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "e", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
+    try setVar(c_vm.?, c_state.?, "f", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
@@ -2860,6 +2984,12 @@ test "If Else flow" {
 
     try std.testing.expectEqual(10, (try getVar(c_vm.?, c_state.?, "a")).as.int_val);
     try std.testing.expectEqual(20, (try getVar(c_vm.?, c_state.?, "b")).as.int_val);
+
+    try std.testing.expectEqual(20, (try getVar(c_vm.?, c_state.?, "c")).as.int_val);
+    try std.testing.expectEqual(30, (try getVar(c_vm.?, c_state.?, "d")).as.int_val);
+
+    try std.testing.expectEqual(20, (try getVar(c_vm.?, c_state.?, "e")).as.int_val);
+    try std.testing.expectEqual(30, (try getVar(c_vm.?, c_state.?, "f")).as.int_val);
 }
 
 test "While loop flow" {
