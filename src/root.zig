@@ -3576,7 +3576,7 @@ test "Get OP pos" {
 
     const SOURCE =
         \\a = 1.0
-        \\b = a == 1
+        \\b = NOT a
     ;
 
     try expectEnum(
@@ -3608,7 +3608,7 @@ test "Get OP pos" {
     var pos: usize = 0;
     _ = c.basic26_Script_get_op_pos(c_script.?, run_error.ip, &pos);
 
-    try std.testing.expectEqual(14, pos);
+    try std.testing.expectEqual(12, pos);
 }
 
 // Does not work for now (at least on macOS)
