@@ -534,8 +534,10 @@ const Vm = struct {
                         else => unreachable,
                     };
                 } else {
-                    state.push(Value.fromInt(0)) catch {
-                        return .{ .err = ExecuteError.StackOverflow };
+                    res = switch (op) {
+                        .eq => false,
+                        .neq => true,
+                        else => return .{ .err = ExecuteError.TypeMismatch },
                     };
                 }
 
