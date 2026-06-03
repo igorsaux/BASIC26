@@ -3611,7 +3611,7 @@ test "Get OP pos" {
     try std.testing.expectEqual(12, pos);
 }
 
-// Does not work for now (at least on macOS)
+// Seems fuzzing works only on Linux for now.
 
 test "fuzzing" {
     try std.testing.fuzz({}, testOne, .{});
@@ -3621,33 +3621,55 @@ fn testOne(context: void, smith: *std.testing.Smith) !void {
     _ = context;
 
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
+
+    const input = try std.testing.allocator.alloc(u8, 16384);
+    defer std.testing.allocator.free(input);
+
+    const ascii_weights: []const std.testing.Smith.Weight = &.{
+        .rangeAtMost(u8, 9, 10, 1),
+        .rangeAtMost(u8, 32, 126, 1),
+    };
 
     while (!smith.eos()) {
         var compile_err: c.basic26_CompileErrorInfo = .{};
 
-        if (c.basic26_Script_compile(c_script.?, &.{}, &compile_err) != c.BASIC26_RESULT_OK) {
+        const code_len = smith.valueRangeAtMost(u64, 1, input.len);
+        const code = input[0..code_len];
+
+        if (smith.boolWeighted(1, 99)) {
+            smith.bytesWeighted(code, ascii_weights);
+        } else {
+            smith.bytes(code);
+        }
+
+        if (basic26_Script_compile(c_script.?, &.{
+            .vm = c_vm.?,
+            .source = code.ptr,
+            .source_len = code.len,
+            .limits = &.{},
+        }, &compile_err) != c.BASIC26_RESULT_OK) {
             continue;
         }
 
-        c.basic26_State_clear(c_state.?, &.{
+        basic26_State_clear(c_state.?, &.{
             .clear_stack = true,
             .clear_vars = true,
         });
-        c.basic26_State_set_ip(c_state.?, 0);
+        basic26_State_set_ip(c_state.?, 0);
 
         var runtime_err: c.basic26_RuntimeErrorInfo = .{};
 
-        _ = c.basic26_Vm_run(c_vm.?, &.{
+        _ = basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
