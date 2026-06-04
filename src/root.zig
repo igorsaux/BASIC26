@@ -169,6 +169,7 @@ const Op = union(enum) {
     mul,
     div,
     rem,
+    neg,
     eq,
     neq,
     lt,
@@ -466,6 +467,23 @@ const Vm = struct {
                     }
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_FLOAT and rhs.type == c.BASIC26_VALUE_TYPE_FLOAT) {
                     state.push(Value.fromFloat(@rem(lhs.as.float_val, rhs.as.float_val))) catch {
+                        return .{ .err = ExecuteError.StackOverflow };
+                    };
+                } else {
+                    return .{ .err = ExecuteError.TypeMismatch };
+                }
+            },
+            .neg => {
+                const val = state.pop() orelse {
+                    return .{ .err = ExecuteError.StackUnderflow };
+                };
+
+                if (val.type == c.BASIC26_VALUE_TYPE_INT) {
+                    state.push(Value.fromInt(-%val.as.int_val)) catch {
+                        return .{ .err = ExecuteError.StackOverflow };
+                    };
+                } else if (val.type == c.BASIC26_VALUE_TYPE_FLOAT) {
+                    state.push(Value.fromFloat(-val.as.float_val)) catch {
                         return .{ .err = ExecuteError.StackOverflow };
                     };
                 } else {
@@ -1396,6 +1414,7 @@ const operator_map = std.StaticStringMap(OpInfo).initComptime(.{
     .{ "%", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .rem }) },
     .{ "NOT", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .op = .bool_not }) },
     .{ "~", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .op = .bit_not }) },
+    .{ "NEG", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .op = .neg }) },
 });
 
 const special_float_set = std.StaticStringMap(void).initComptime(.{
@@ -1550,6 +1569,13 @@ const Lexer = struct {
         }
 
         const next_is_digit = this.pos + 1 < this.src.len and std.ascii.isDigit(this.src[this.pos + 1]);
+
+        if (is_unary_minus and !next_is_digit) {
+            this.pos += 1;
+            this.expect_value = true;
+
+            return .init(.{ .op = "NEG" }, this.pos - 1);
+        }
 
         if (std.ascii.isDigit(ch) or (is_unary_minus and next_is_digit)) {
             const start = this.pos;
@@ -1788,6 +1814,9 @@ const Script = struct {
                 },
                 .rem => {
                     try writer.writer.print("REM\n", .{});
+                },
+                .neg => {
+                    try writer.writer.print("NEG\n", .{});
                 },
                 .eq => {
                     try writer.writer.print("EQ\n", .{});
@@ -2620,6 +2649,7 @@ test "Basic arithmetics" {
         \\f = b - a
         \\g = (a + b) / 2.0
         \\h = b % a
+        \\h = -h
     ;
 
     try expectEnum(
@@ -2683,7 +2713,7 @@ test "Basic arithmetics" {
     try std.testing.expectEqual(7.5, g_value.as.float_val);
 
     try std.testing.expect(h_value.type == c.BASIC26_VALUE_TYPE_FLOAT);
-    try std.testing.expectEqual(5.0, h_value.as.float_val);
+    try std.testing.expectEqual(-5.0, h_value.as.float_val);
 }
 
 test "Boolean operators" {

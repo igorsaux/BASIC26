@@ -66,18 +66,19 @@
  * ### Expressions and Operators
  * Expressions support the following operators, listed from lowest to highest precedence:
  *
- * | Precedence | Operator   | Description             | Operand Types |
- * |:----------:|:----------:|:------------------------|:--------------|
- * | 9          | OR         | Boolean OR              | INT, INT      |
- * | 8          | AND        | Boolean AND             | INT, INT      |
- * | 7          | == !=      | Equality / Inequality   | same types    |
- * | 7          | < > <= >=  | Ordering comparison     | INT or FLOAT  |
- * | 6          | \| ^ &     | Bitwise OR / XOR / AND  | INT, INT      |
- * | 5          | << >>      | Bit shift left / right  | INT, INT      |
- * | 4          | + -        | Addition / Subtraction  | INT or FLOAT  |
- * | 3          | * / %      | Multiply / Divide / Rem | INT or FLOAT  |
- * | 1          | NOT        | Boolean NOT (unary)     | INT           |
- * | 1          | ~          | Bitwise NOT (unary)     | INT           |
+ * | Precedence | Operator   | Description             | Operand Types    |
+ * |:----------:|:----------:|:------------------------|:-----------------|
+ * | 9          | OR         | Boolean OR              | INT, INT         |
+ * | 8          | AND        | Boolean AND             | INT, INT         |
+ * | 7          | == !=      | Equality / Inequality   | same types       |
+ * | 7          | < > <= >=  | Ordering comparison     | INT or FLOAT     |
+ * | 6          | \| ^ &     | Bitwise OR / XOR / AND  | INT, INT         |
+ * | 5          | << >>      | Bit shift left / right  | INT, INT         |
+ * | 4          | + -        | Addition / Subtraction  | INT or FLOAT     |
+ * | 3          | * / %      | Multiply / Divide / Rem | INT or FLOAT     |
+ * | 1          | NOT        | Boolean NOT (unary)     | INT              |
+ * | 1          | ~          | Bitwise NOT (unary)     | INT              |
+ * | 1          | -          | Unary minus (negation)  | INT or FLOAT     |
  *
  * Parentheses `()` can be used to override precedence. Comparison and boolean operators produce
  * INT values: 1 for true, 0 for false. Type mismatches (e.g. adding INT to FLOAT) result in a
