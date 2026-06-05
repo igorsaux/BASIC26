@@ -2355,6 +2355,7 @@ export fn basic26_Script_clear(
 
     if (options.?.clear_ops) {
         script.ops.clearRetainingCapacity();
+        script.ops_source_map.clearRetainingCapacity();
     }
 
     if (options.?.clear_labels) {
