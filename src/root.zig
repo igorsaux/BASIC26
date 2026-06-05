@@ -933,6 +933,8 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
             var ops_since_time_check: usize = if (check_time_limit) limits.time_check_interval else 0;
 
             while (state.ip < script.ops.items.len) {
+                @prefetch(script.ops.items, .{});
+
                 if (comptime check_ops_limit) {
                     if (limits.max_ops > 0 and ops_executed >= limits.max_ops) {
                         return c.BASIC26_RESULT_OUT_OF_LIMITS;
@@ -956,6 +958,7 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
 
                 const op = script.ops.items[state.ip];
                 const prev_ip = state.ip;
+
                 state.ip += 1;
                 ops_executed += 1;
 
