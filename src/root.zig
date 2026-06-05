@@ -155,42 +155,6 @@ const Allocator = union(enum) {
     }
 };
 
-const Op = union(enum) {
-    push_int: c.basic26_IntType,
-    push_float: c.basic26_FloatType,
-    push_string: c.basic26_StringId,
-    push_symbol: c.basic26_SymbolId,
-    push_address: usize,
-    push_null,
-    load: c.basic26_SymbolId,
-    store: c.basic26_SymbolId,
-    add,
-    sub,
-    mul,
-    div,
-    rem,
-    neg,
-    eq,
-    neq,
-    lt,
-    gt,
-    lte,
-    gte,
-    bool_and,
-    bool_or,
-    bool_not,
-    bit_and,
-    bit_or,
-    bit_xor,
-    bit_not,
-    shl,
-    shr,
-    jump: usize,
-    jump_if_false: usize,
-    call: c.basic26_SymbolId,
-    pop,
-};
-
 const ExecuteError = error{
     StackUnderflow,
     StackOverflow,
@@ -294,40 +258,40 @@ const Vm = struct {
         this.function_callbacks.deinit(alloc);
     }
 
-    pub inline fn execute(this: *Vm, state: *State, script: *const Script, userdata: ?*anyopaque, op: Op) ExecuteResult {
-        switch (op) {
-            .push_int => {
-                state.push(Value.fromInt(op.push_int)) catch {
+    pub inline fn execute(this: *Vm, state: *State, script: *const Script, userdata: ?*anyopaque, op: c.basic26_Op) ExecuteResult {
+        switch (op.code) {
+            c.BASIC26_OPCODE_PUSH_INT => {
+                state.push(Value.fromInt(op.imm.as_int)) catch {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .push_float => {
-                state.push(Value.fromFloat(op.push_float)) catch {
+            c.BASIC26_OPCODE_PUSH_FLOAT => {
+                state.push(Value.fromFloat(op.imm.as_float)) catch {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .push_string => {
-                state.push(Value.fromString(op.push_string)) catch {
+            c.BASIC26_OPCODE_PUSH_STRING => {
+                state.push(Value.fromString(op.imm.as_string)) catch {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .push_symbol => {
-                state.push(Value.fromSymbol(op.push_symbol)) catch {
+            c.BASIC26_OPCODE_PUSH_SYMBOL => {
+                state.push(Value.fromSymbol(op.imm.as_symbol)) catch {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .push_address => {
-                state.push(Value.fromAddress(op.push_address)) catch {
+            c.BASIC26_OPCODE_PUSH_ADDRESS => {
+                state.push(Value.fromAddress(op.imm.as_symbol)) catch {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .push_null => {
+            c.BASIC26_OPCODE_PUSH_NULL => {
                 state.push(Value.fromNull()) catch {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .load => |id| {
-                const val = state.getVar(id) orelse {
+            c.BASIC26_OPCODE_LOAD => {
+                const val = state.getVar(op.imm.as_symbol) orelse {
                     return .{ .err = ExecuteError.UndefinedVariable };
                 };
 
@@ -335,20 +299,18 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .store => |id| {
+            c.BASIC26_OPCODE_STORE => {
                 const val = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
 
-                const exists = state.setVar(this.allocator.allocator(), id, val, false) catch {
-                    return .{ .err = ExecuteError.OutOfMemory };
-                };
+                const exists = state.setVar(this.allocator.allocator(), op.imm.as_symbol, val, false) catch unreachable;
 
                 if (!exists) {
                     return .{ .err = ExecuteError.UndefinedVariable };
                 }
             },
-            .add => {
+            c.BASIC26_OPCODE_ADD => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -369,7 +331,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
-            .sub => {
+            c.BASIC26_OPCODE_SUB => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -390,7 +352,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
-            .mul => {
+            c.BASIC26_OPCODE_MUL => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -411,7 +373,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
-            .div => {
+            c.BASIC26_OPCODE_DIV => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -442,7 +404,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
-            .rem => {
+            c.BASIC26_OPCODE_REM => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -473,7 +435,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
-            .neg => {
+            c.BASIC26_OPCODE_NEG => {
                 const val = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -490,7 +452,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
                 }
             },
-            .eq, .neq, .lt, .lte, .gt, .gte => {
+            c.BASIC26_OPCODE_EQ, c.BASIC26_OPCODE_NEQ, c.BASIC26_OPCODE_LT, c.BASIC26_OPCODE_LTE, c.BASIC26_OPCODE_GT, c.BASIC26_OPCODE_GTE => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -502,59 +464,59 @@ const Vm = struct {
                 var res = false;
 
                 if (lhs.type == c.BASIC26_VALUE_TYPE_INT and rhs.type == c.BASIC26_VALUE_TYPE_INT) {
-                    res = switch (op) {
-                        .eq => lhs.as.int_val == rhs.as.int_val,
-                        .neq => lhs.as.int_val != rhs.as.int_val,
-                        .lt => lhs.as.int_val < rhs.as.int_val,
-                        .lte => lhs.as.int_val <= rhs.as.int_val,
-                        .gt => lhs.as.int_val > rhs.as.int_val,
-                        .gte => lhs.as.int_val >= rhs.as.int_val,
+                    res = switch (op.code) {
+                        c.BASIC26_OPCODE_EQ => lhs.as.int_val == rhs.as.int_val,
+                        c.BASIC26_OPCODE_NEQ => lhs.as.int_val != rhs.as.int_val,
+                        c.BASIC26_OPCODE_LT => lhs.as.int_val < rhs.as.int_val,
+                        c.BASIC26_OPCODE_LTE => lhs.as.int_val <= rhs.as.int_val,
+                        c.BASIC26_OPCODE_GT => lhs.as.int_val > rhs.as.int_val,
+                        c.BASIC26_OPCODE_GTE => lhs.as.int_val >= rhs.as.int_val,
                         else => unreachable,
                     };
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_FLOAT and rhs.type == c.BASIC26_VALUE_TYPE_FLOAT) {
-                    res = switch (op) {
-                        .eq => lhs.as.float_val == rhs.as.float_val,
-                        .neq => lhs.as.float_val != rhs.as.float_val,
-                        .lt => lhs.as.float_val < rhs.as.float_val,
-                        .lte => lhs.as.float_val <= rhs.as.float_val,
-                        .gt => lhs.as.float_val > rhs.as.float_val,
-                        .gte => lhs.as.float_val >= rhs.as.float_val,
+                    res = switch (op.code) {
+                        c.BASIC26_OPCODE_EQ => lhs.as.float_val == rhs.as.float_val,
+                        c.BASIC26_OPCODE_NEQ => lhs.as.float_val != rhs.as.float_val,
+                        c.BASIC26_OPCODE_LT => lhs.as.float_val < rhs.as.float_val,
+                        c.BASIC26_OPCODE_LTE => lhs.as.float_val <= rhs.as.float_val,
+                        c.BASIC26_OPCODE_GT => lhs.as.float_val > rhs.as.float_val,
+                        c.BASIC26_OPCODE_GTE => lhs.as.float_val >= rhs.as.float_val,
                         else => unreachable,
                     };
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_STRING and rhs.type == c.BASIC26_VALUE_TYPE_STRING) {
-                    res = switch (op) {
-                        .eq => lhs.as.string_id == rhs.as.string_id,
-                        .neq => lhs.as.string_id != rhs.as.string_id,
+                    res = switch (op.code) {
+                        c.BASIC26_OPCODE_EQ => lhs.as.string_id == rhs.as.string_id,
+                        c.BASIC26_OPCODE_NEQ => lhs.as.string_id != rhs.as.string_id,
                         else => return .{ .err = ExecuteError.TypeMismatch },
                     };
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_NULL and rhs.type == c.BASIC26_VALUE_TYPE_NULL) {
-                    res = (op == .eq or op == .lte or op == .gte);
+                    res = (op.code == c.BASIC26_OPCODE_EQ or op.code == c.BASIC26_OPCODE_LTE or op.code == c.BASIC26_OPCODE_GTE);
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_SYMBOL and rhs.type == c.BASIC26_VALUE_TYPE_SYMBOL) {
-                    res = switch (op) {
-                        .eq => lhs.as.symbol_id == rhs.as.symbol_id,
-                        .neq => lhs.as.symbol_id != rhs.as.symbol_id,
+                    res = switch (op.code) {
+                        c.BASIC26_OPCODE_EQ => lhs.as.symbol_id == rhs.as.symbol_id,
+                        c.BASIC26_OPCODE_NEQ => lhs.as.symbol_id != rhs.as.symbol_id,
                         else => return .{ .err = ExecuteError.TypeMismatch },
                     };
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_OBJECT and rhs.type == c.BASIC26_VALUE_TYPE_OBJECT) {
-                    res = switch (op) {
-                        .eq => lhs.as.object_ptr == rhs.as.object_ptr,
-                        .neq => lhs.as.object_ptr != rhs.as.object_ptr,
+                    res = switch (op.code) {
+                        c.BASIC26_OPCODE_EQ => lhs.as.object_ptr == rhs.as.object_ptr,
+                        c.BASIC26_OPCODE_NEQ => lhs.as.object_ptr != rhs.as.object_ptr,
                         else => return .{ .err = ExecuteError.TypeMismatch },
                     };
                 } else if (lhs.type == c.BASIC26_VALUE_TYPE_ADDRESS and rhs.type == c.BASIC26_VALUE_TYPE_ADDRESS) {
-                    res = switch (op) {
-                        .eq => lhs.as.address_val == rhs.as.address_val,
-                        .neq => lhs.as.address_val != rhs.as.address_val,
-                        .lt => lhs.as.address_val < rhs.as.address_val,
-                        .lte => lhs.as.address_val <= rhs.as.address_val,
-                        .gt => lhs.as.address_val > rhs.as.address_val,
-                        .gte => lhs.as.address_val >= rhs.as.address_val,
+                    res = switch (op.code) {
+                        c.BASIC26_OPCODE_EQ => lhs.as.address_val == rhs.as.address_val,
+                        c.BASIC26_OPCODE_NEQ => lhs.as.address_val != rhs.as.address_val,
+                        c.BASIC26_OPCODE_LT => lhs.as.address_val < rhs.as.address_val,
+                        c.BASIC26_OPCODE_LTE => lhs.as.address_val <= rhs.as.address_val,
+                        c.BASIC26_OPCODE_GT => lhs.as.address_val > rhs.as.address_val,
+                        c.BASIC26_OPCODE_GTE => lhs.as.address_val >= rhs.as.address_val,
                         else => unreachable,
                     };
                 } else {
-                    res = switch (op) {
-                        .eq => false,
-                        .neq => true,
+                    res = switch (op.code) {
+                        c.BASIC26_OPCODE_EQ => false,
+                        c.BASIC26_OPCODE_NEQ => true,
                         else => return .{ .err = ExecuteError.TypeMismatch },
                     };
                 }
@@ -563,7 +525,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .bool_and => {
+            c.BASIC26_OPCODE_BOOL_AND => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -586,7 +548,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .bool_or => {
+            c.BASIC26_OPCODE_BOOL_OR => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -609,7 +571,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .bool_not => {
+            c.BASIC26_OPCODE_BOOL_NOT => {
                 const val = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -623,7 +585,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .bit_and => {
+            c.BASIC26_OPCODE_BIT_AND => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -640,7 +602,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .bit_or => {
+            c.BASIC26_OPCODE_BIT_OR => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -657,7 +619,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .bit_xor => {
+            c.BASIC26_OPCODE_BIT_XOR => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -674,7 +636,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .bit_not => {
+            c.BASIC26_OPCODE_BIT_NOT => {
                 const value = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -687,7 +649,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .shl => {
+            c.BASIC26_OPCODE_SHL => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -708,7 +670,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .shr => {
+            c.BASIC26_OPCODE_SHR => {
                 const rhs = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -729,8 +691,10 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackOverflow };
                 };
             },
-            .jump => |ip| state.ip = ip,
-            .jump_if_false => |ip| {
+            c.BASIC26_OPCODE_JUMP => {
+                state.ip = op.imm.as_address;
+            },
+            c.BASIC26_OPCODE_JUMP_IF_FALSE => {
                 const val = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -741,10 +705,10 @@ const Vm = struct {
                     return .{ .err = ExecuteError.TypeMismatch };
 
                 if (is_false) {
-                    state.ip = ip;
+                    state.ip = op.imm.as_address;
                 }
             },
-            .call => |id| {
+            c.BASIC26_OPCODE_CALL => {
                 const args_count = state.pop() orelse {
                     return .{ .err = ExecuteError.StackUnderflow };
                 };
@@ -757,7 +721,7 @@ const Vm = struct {
                     return .{ .err = ExecuteError.StackUnderflow };
                 }
 
-                const callback = this.function_callbacks.get(id) orelse {
+                const callback = this.function_callbacks.get(op.imm.as_symbol) orelse {
                     return .{ .err = ExecuteError.UndefinedFunction };
                 };
 
@@ -766,7 +730,7 @@ const Vm = struct {
                     .state = @ptrCast(state),
                     .script = @ptrCast(script),
                     .userdata = userdata,
-                    .function_name = id,
+                    .function_name = op.imm.as_symbol,
                 };
 
                 const argc = @as(usize, @intCast(args_count.as.int_val));
@@ -784,10 +748,12 @@ const Vm = struct {
                     else => .{ .err = ExecuteError.FunctionError },
                 };
             },
-            .pop => {
+            c.BASIC26_OPCODE_POP => {
                 _ = state.pop();
             },
+            else => unreachable,
         }
+
         return .{ .ok = {} };
     }
 };
@@ -997,7 +963,7 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
                     ops_since_time_check += 1;
                 }
 
-                const is_call_op = op == .call;
+                const is_call_op = op.code == c.BASIC26_OPCODE_CALL;
 
                 switch (vm.execute(state, script, userdata, op)) {
                     .ok => {},
@@ -1390,31 +1356,31 @@ const TokenKind = union(enum) {
 const OpInfo = struct {
     precedence: u8,
     right_assoc: bool,
-    op: Op,
+    code: c.basic26_Opcode,
 };
 
 const operator_map = std.StaticStringMap(OpInfo).initComptime(.{
-    .{ "OR", @as(OpInfo, .{ .precedence = 1, .right_assoc = false, .op = .bool_or }) },
-    .{ "AND", @as(OpInfo, .{ .precedence = 2, .right_assoc = false, .op = .bool_and }) },
-    .{ "==", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .eq }) },
-    .{ "!=", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .neq }) },
-    .{ "<", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .lt }) },
-    .{ ">", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .gt }) },
-    .{ "<=", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .lte }) },
-    .{ ">=", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .op = .gte }) },
-    .{ "|", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .op = .bit_or }) },
-    .{ "^", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .op = .bit_xor }) },
-    .{ "&", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .op = .bit_and }) },
-    .{ "<<", @as(OpInfo, .{ .precedence = 5, .right_assoc = false, .op = .shl }) },
-    .{ ">>", @as(OpInfo, .{ .precedence = 5, .right_assoc = false, .op = .shr }) },
-    .{ "+", @as(OpInfo, .{ .precedence = 6, .right_assoc = false, .op = .add }) },
-    .{ "-", @as(OpInfo, .{ .precedence = 6, .right_assoc = false, .op = .sub }) },
-    .{ "*", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .mul }) },
-    .{ "/", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .div }) },
-    .{ "%", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .op = .rem }) },
-    .{ "NOT", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .op = .bool_not }) },
-    .{ "~", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .op = .bit_not }) },
-    .{ "NEG", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .op = .neg }) },
+    .{ "OR", @as(OpInfo, .{ .precedence = 1, .right_assoc = false, .code = c.BASIC26_OPCODE_BOOL_OR }) },
+    .{ "AND", @as(OpInfo, .{ .precedence = 2, .right_assoc = false, .code = c.BASIC26_OPCODE_BOOL_AND }) },
+    .{ "==", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .code = c.BASIC26_OPCODE_EQ }) },
+    .{ "!=", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .code = c.BASIC26_OPCODE_NEQ }) },
+    .{ "<", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .code = c.BASIC26_OPCODE_LT }) },
+    .{ ">", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .code = c.BASIC26_OPCODE_GT }) },
+    .{ "<=", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .code = c.BASIC26_OPCODE_LTE }) },
+    .{ ">=", @as(OpInfo, .{ .precedence = 3, .right_assoc = false, .code = c.BASIC26_OPCODE_GTE }) },
+    .{ "|", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .code = c.BASIC26_OPCODE_BIT_OR }) },
+    .{ "^", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .code = c.BASIC26_OPCODE_BIT_XOR }) },
+    .{ "&", @as(OpInfo, .{ .precedence = 4, .right_assoc = false, .code = c.BASIC26_OPCODE_BIT_AND }) },
+    .{ "<<", @as(OpInfo, .{ .precedence = 5, .right_assoc = false, .code = c.BASIC26_OPCODE_SHL }) },
+    .{ ">>", @as(OpInfo, .{ .precedence = 5, .right_assoc = false, .code = c.BASIC26_OPCODE_SHR }) },
+    .{ "+", @as(OpInfo, .{ .precedence = 6, .right_assoc = false, .code = c.BASIC26_OPCODE_ADD }) },
+    .{ "-", @as(OpInfo, .{ .precedence = 6, .right_assoc = false, .code = c.BASIC26_OPCODE_SUB }) },
+    .{ "*", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .code = c.BASIC26_OPCODE_MUL }) },
+    .{ "/", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .code = c.BASIC26_OPCODE_DIV }) },
+    .{ "%", @as(OpInfo, .{ .precedence = 7, .right_assoc = false, .code = c.BASIC26_OPCODE_REM }) },
+    .{ "NOT", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .code = c.BASIC26_OPCODE_BOOL_NOT }) },
+    .{ "~", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .code = c.BASIC26_OPCODE_BIT_NOT }) },
+    .{ "NEG", @as(OpInfo, .{ .precedence = 8, .right_assoc = true, .code = c.BASIC26_OPCODE_NEG }) },
 });
 
 const special_float_set = std.StaticStringMap(void).initComptime(.{
@@ -1687,7 +1653,7 @@ inline fn isValidSymbol(bytes: []const u8) bool {
 
 const Script = struct {
     strings: *Strings,
-    ops: std.ArrayList(Op) = .empty,
+    ops: std.ArrayList(c.basic26_Op) = .empty,
     ops_source_map: std.ArrayList(usize) = .empty,
     labels: std.StringHashMapUnmanaged(usize) = .empty,
     parser_state: ParserState = .{},
@@ -1716,7 +1682,7 @@ const Script = struct {
         TooManyArgs,
     };
 
-    pub inline fn appendOp(this: *Script, allocator: std.mem.Allocator, op: Op, pos: usize) error{OutOfMemory}!void {
+    pub inline fn appendOp(this: *Script, allocator: std.mem.Allocator, op: c.basic26_Op, pos: usize) error{OutOfMemory}!void {
         try this.ops.append(allocator, op);
         errdefer _ = this.ops.pop();
 
@@ -1771,110 +1737,113 @@ const Script = struct {
         try writer.writer.print("---\n", .{});
 
         for (this.ops.items) |op| {
-            switch (op) {
-                .push_int => {
-                    try writer.writer.print("PUSH_INT {d}\n", .{op.push_int});
+            switch (op.code) {
+                c.BASIC26_OPCODE_PUSH_INT => {
+                    try writer.writer.print("PUSH_INT {d}\n", .{op.imm.as_int});
                 },
-                .push_float => {
-                    try writer.writer.print("PUSH_FLOAT {d}\n", .{op.push_float});
+                c.BASIC26_OPCODE_PUSH_FLOAT => {
+                    try writer.writer.print("PUSH_FLOAT {d}\n", .{op.imm.as_float});
                 },
-                .push_string => {
-                    const str = this.strings.str_map.get(op.push_string).?;
+                c.BASIC26_OPCODE_PUSH_STRING => {
+                    const str = this.strings.str_map.get(op.imm.as_string).?;
                     try writer.writer.print("PUSH_STRING \"{s}\"\n", .{str});
                 },
-                .push_symbol => {
-                    const str = this.strings.str_map.get(op.push_symbol).?;
+                c.BASIC26_OPCODE_PUSH_SYMBOL => {
+                    const str = this.strings.str_map.get(op.imm.as_symbol).?;
                     try writer.writer.print("PUSH_SYMBOL \"{s}\"\n", .{str});
                 },
-                .push_address => {
-                    try writer.writer.print("PUSH_ADDRESS {d}\n", .{op.push_address});
+                c.BASIC26_OPCODE_PUSH_ADDRESS => {
+                    try writer.writer.print("PUSH_ADDRESS {d}\n", .{op.imm.as_address});
                 },
-                .push_null => {
+                c.BASIC26_OPCODE_PUSH_NULL => {
                     try writer.writer.print("PUSH_NULL\n", .{});
                 },
-                .load => {
-                    const str = this.strings.str_map.get(op.load).?;
+                c.BASIC26_OPCODE_LOAD => {
+                    const str = this.strings.str_map.get(op.imm.as_symbol).?;
                     try writer.writer.print("LOAD \"{s}\"\n", .{str});
                 },
-                .store => {
-                    const str = this.strings.str_map.get(op.store).?;
+                c.BASIC26_OPCODE_STORE => {
+                    const str = this.strings.str_map.get(op.imm.as_symbol).?;
                     try writer.writer.print("STORE \"{s}\"\n", .{str});
                 },
-                .add => {
+                c.BASIC26_OPCODE_ADD => {
                     try writer.writer.print("ADD\n", .{});
                 },
-                .sub => {
+                c.BASIC26_OPCODE_SUB => {
                     try writer.writer.print("SUB\n", .{});
                 },
-                .mul => {
+                c.BASIC26_OPCODE_MUL => {
                     try writer.writer.print("MUL\n", .{});
                 },
-                .div => {
+                c.BASIC26_OPCODE_DIV => {
                     try writer.writer.print("DIV\n", .{});
                 },
-                .rem => {
+                c.BASIC26_OPCODE_REM => {
                     try writer.writer.print("REM\n", .{});
                 },
-                .neg => {
+                c.BASIC26_OPCODE_NEG => {
                     try writer.writer.print("NEG\n", .{});
                 },
-                .eq => {
+                c.BASIC26_OPCODE_EQ => {
                     try writer.writer.print("EQ\n", .{});
                 },
-                .neq => {
+                c.BASIC26_OPCODE_NEQ => {
                     try writer.writer.print("NEQ\n", .{});
                 },
-                .lt => {
+                c.BASIC26_OPCODE_LT => {
                     try writer.writer.print("LT\n", .{});
                 },
-                .gt => {
+                c.BASIC26_OPCODE_GT => {
                     try writer.writer.print("GT\n", .{});
                 },
-                .lte => {
+                c.BASIC26_OPCODE_LTE => {
                     try writer.writer.print("LTE\n", .{});
                 },
-                .gte => {
+                c.BASIC26_OPCODE_GTE => {
                     try writer.writer.print("GTE\n", .{});
                 },
-                .bool_and => {
+                c.BASIC26_OPCODE_BOOL_AND => {
                     try writer.writer.print("BOOL_AND\n", .{});
                 },
-                .bool_or => {
+                c.BASIC26_OPCODE_BOOL_OR => {
                     try writer.writer.print("BOOL_OR\n", .{});
                 },
-                .bool_not => {
+                c.BASIC26_OPCODE_BOOL_NOT => {
                     try writer.writer.print("BOOL_NOT\n", .{});
                 },
-                .bit_and => {
+                c.BASIC26_OPCODE_BIT_AND => {
                     try writer.writer.print("BIT_AND\n", .{});
                 },
-                .bit_or => {
+                c.BASIC26_OPCODE_BIT_OR => {
                     try writer.writer.print("BIT_OR\n", .{});
                 },
-                .bit_xor => {
+                c.BASIC26_OPCODE_BIT_XOR => {
                     try writer.writer.print("BIT_XOR\n", .{});
                 },
-                .bit_not => {
+                c.BASIC26_OPCODE_BIT_NOT => {
                     try writer.writer.print("BIT_NOT\n", .{});
                 },
-                .shl => {
+                c.BASIC26_OPCODE_SHL => {
                     try writer.writer.print("SHL\n", .{});
                 },
-                .shr => {
+                c.BASIC26_OPCODE_SHR => {
                     try writer.writer.print("SHR\n", .{});
                 },
-                .jump => {
-                    try writer.writer.print("JUMP {d}\n", .{op.jump});
+                c.BASIC26_OPCODE_JUMP => {
+                    try writer.writer.print("JUMP {d}\n", .{op.imm.as_address});
                 },
-                .jump_if_false => {
-                    try writer.writer.print("JUMP_IF_FALSE {d}\n", .{op.jump_if_false});
+                c.BASIC26_OPCODE_JUMP_IF_FALSE => {
+                    try writer.writer.print("JUMP_IF_FALSE {d}\n", .{op.imm.as_address});
                 },
-                .call => {
-                    const str = this.strings.str_map.get(op.call).?;
+                c.BASIC26_OPCODE_CALL => {
+                    const str = this.strings.str_map.get(op.imm.as_symbol).?;
                     try writer.writer.print("CALL \"{s}\"\n", .{str});
                 },
-                .pop => {
+                c.BASIC26_OPCODE_POP => {
                     try writer.writer.print("POP\n", .{});
+                },
+                else => {
+                    try writer.writer.print("UNDEFINED\n", .{});
                 },
             }
         }
@@ -1950,29 +1919,49 @@ const ParserState = struct {
 
             switch (tok.kind) {
                 .int => {
-                    try script.appendOp(allocator, .{ .push_int = tok.kind.int }, line_offset + tok.pos);
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_PUSH_INT,
+                        .imm = .{ .as_int = tok.kind.int },
+                    }, line_offset + tok.pos);
+
                     idx.* += 1;
                 },
                 .float => {
-                    try script.appendOp(allocator, .{ .push_float = tok.kind.float }, line_offset + tok.pos);
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_PUSH_FLOAT,
+                        .imm = .{ .as_float = tok.kind.float },
+                    }, line_offset + tok.pos);
+
                     idx.* += 1;
                 },
                 .string_literal => {
                     const id = try script.parseString(allocator, tok.kind.string_literal, limits);
 
-                    try script.appendOp(allocator, .{ .push_string = id }, line_offset + tok.pos);
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_PUSH_STRING,
+                        .imm = .{ .as_string = id },
+                    }, line_offset + tok.pos);
+
                     idx.* += 1;
                 },
                 .symbol_literal => {
                     const id = try script.parseSymbol(allocator, tok.kind.symbol_literal, limits);
 
-                    try script.appendOp(allocator, .{ .push_symbol = id }, line_offset + tok.pos);
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_PUSH_SYMBOL,
+                        .imm = .{ .as_symbol = id },
+                    }, line_offset + tok.pos);
+
                     idx.* += 1;
                 },
                 .address_literal => {
                     const jump_idx = script.ops.items.len;
 
-                    try script.appendOp(allocator, .{ .push_address = 0 }, line_offset + tok.pos);
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_PUSH_ADDRESS,
+                        .imm = .{ .as_address = 0 },
+                    }, line_offset + tok.pos);
+
                     try this.pending_jumps.append(allocator, .{
                         .op_index = jump_idx,
                         .label_name = tok.kind.address_literal,
@@ -1984,11 +1973,16 @@ const ParserState = struct {
                 .ident => {
                     const id = try script.parseSymbol(allocator, tok.kind.ident, limits);
 
-                    try script.appendOp(allocator, .{ .load = id }, line_offset + tok.pos);
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_LOAD,
+                        .imm = .{ .as_symbol = id },
+                    }, line_offset + tok.pos);
+
                     idx.* += 1;
                 },
                 .lparen => {
                     try this.op_stack.append(allocator, .init("(", line_offset + tok.pos));
+
                     idx.* += 1;
                 },
                 .rparen => {
@@ -1997,7 +1991,9 @@ const ParserState = struct {
                             return Script.ParseError.UnknownOperator;
                         };
 
-                        try script.appendOp(allocator, info.op, line_offset + tok.pos);
+                        try script.appendOp(allocator, .{
+                            .code = @intCast(info.code),
+                        }, line_offset + tok.pos);
                     }
 
                     if (this.op_stack.items.len == 0) {
@@ -2030,7 +2026,7 @@ const ParserState = struct {
                                 return Script.ParseError.UnknownOperator;
                             };
 
-                            try script.appendOp(allocator, popped_info.op, line_offset + tok.pos);
+                            try script.appendOp(allocator, .{ .code = @intCast(popped_info.code) }, line_offset + tok.pos);
                         } else {
                             break;
                         }
@@ -2041,7 +2037,7 @@ const ParserState = struct {
                 },
                 .keyword => {
                     if (tok.kind.keyword == .null) {
-                        try script.appendOp(allocator, .push_null, line_offset + tok.pos);
+                        try script.appendOp(allocator, .{ .code = c.BASIC26_OPCODE_PUSH_NULL }, line_offset + tok.pos);
                         idx.* += 1;
                     } else {
                         break;
@@ -2063,7 +2059,7 @@ const ParserState = struct {
                 return Script.ParseError.UnknownOperator;
             };
 
-            try script.appendOp(allocator, info.op, op_str.pos);
+            try script.appendOp(allocator, .{ .code = @intCast(info.code) }, op_str.pos);
         }
     }
 
@@ -2091,9 +2087,12 @@ const ParserState = struct {
                     i.* += 1;
 
                     try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
-
                     const jump_idx = script.ops.items.len;
-                    try script.appendOp(allocator, .{ .jump_if_false = 0 }, line_offset + tokens[0].pos);
+
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
+                        .imm = .{ .as_address = 0 },
+                    }, line_offset + tokens[0].pos);
 
                     try this.ctrl_stack.append(allocator, .{
                         .if_chain = .{
@@ -2117,18 +2116,26 @@ const ParserState = struct {
                         tokens[i.* + 1].kind.keyword == .@"if";
 
                     const jump_end_idx = script.ops.items.len;
-                    try script.appendOp(allocator, .{ .jump = 0 }, line_offset + tokens[0].pos);
+
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_JUMP,
+                        .imm = .{ .as_address = 0 },
+                    }, line_offset + tokens[0].pos);
+
                     try ctrl.if_chain.end_jumps.append(allocator, jump_end_idx);
 
-                    script.ops.items[ctrl.if_chain.last_jump_if_false_idx].jump_if_false = script.ops.items.len;
+                    script.ops.items[ctrl.if_chain.last_jump_if_false_idx].imm.as_address = script.ops.items.len;
 
                     if (is_else_if) {
                         i.* += 2;
 
                         try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
-
                         const jump_idx = script.ops.items.len;
-                        try script.appendOp(allocator, .{ .jump_if_false = 0 }, line_offset + tokens[1].pos);
+
+                        try script.appendOp(allocator, .{
+                            .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
+                            .imm = .{ .as_address = 0 },
+                        }, line_offset + tokens[1].pos);
 
                         try this.ctrl_stack.append(allocator, .{ .if_chain = .{
                             .last_jump_if_false_idx = jump_idx,
@@ -2153,22 +2160,33 @@ const ParserState = struct {
                     }
 
                     const jump_end_idx = script.ops.items.len;
-                    try script.appendOp(allocator, .{ .jump = 0 }, line_offset + tokens[0].pos);
+
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_JUMP,
+                        .imm = .{ .as_address = 0 },
+                    }, line_offset + tokens[0].pos);
+
                     try ctrl.if_chain.end_jumps.append(allocator, jump_end_idx);
 
-                    script.ops.items[ctrl.if_chain.last_jump_if_false_idx].jump_if_false = script.ops.items.len;
+                    script.ops.items[ctrl.if_chain.last_jump_if_false_idx].imm.as_address = script.ops.items.len;
 
                     i.* += 1;
                     try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
 
                     const jump_idx = script.ops.items.len;
-                    try script.appendOp(allocator, .{ .jump_if_false = 0 }, line_offset + tokens[0].pos);
 
-                    try this.ctrl_stack.append(allocator, .{ .if_chain = .{
-                        .last_jump_if_false_idx = jump_idx,
-                        .last_jump_if_false_resolved = false,
-                        .end_jumps = ctrl.if_chain.end_jumps,
-                    } });
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
+                        .imm = .{ .as_address = 0 },
+                    }, line_offset + tokens[0].pos);
+
+                    try this.ctrl_stack.append(allocator, .{
+                        .if_chain = .{
+                            .last_jump_if_false_idx = jump_idx,
+                            .last_jump_if_false_resolved = false,
+                            .end_jumps = ctrl.if_chain.end_jumps,
+                        },
+                    });
                 },
                 .endif => {
                     var ctrl = this.ctrl_stack.pop() orelse {
@@ -2180,11 +2198,11 @@ const ParserState = struct {
                     }
 
                     if (!ctrl.if_chain.last_jump_if_false_resolved) {
-                        script.ops.items[ctrl.if_chain.last_jump_if_false_idx].jump_if_false = script.ops.items.len;
+                        script.ops.items[ctrl.if_chain.last_jump_if_false_idx].imm.as_address = script.ops.items.len;
                     }
 
                     for (ctrl.if_chain.end_jumps.items) |jump_idx| {
-                        script.ops.items[jump_idx].jump = script.ops.items.len;
+                        script.ops.items[jump_idx].imm.as_address = script.ops.items.len;
                     }
 
                     ctrl.if_chain.end_jumps.deinit(allocator);
@@ -2197,7 +2215,10 @@ const ParserState = struct {
 
                     const jump_idx = script.ops.items.len;
 
-                    try script.appendOp(allocator, .{ .jump_if_false = 0 }, line_offset + tokens[0].pos);
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
+                        .imm = .{ .as_address = 0 },
+                    }, line_offset + tokens[0].pos);
                     try this.ctrl_stack.append(allocator, .{ .while_stmt = .{ .start_idx = start_idx, .jump_idx = jump_idx } });
                 },
                 .endwhile => {
@@ -2209,8 +2230,12 @@ const ParserState = struct {
                         return Script.ParseError.SyntaxError;
                     }
 
-                    try script.appendOp(allocator, .{ .jump = ctrl.while_stmt.start_idx }, line_offset + tokens[0].pos);
-                    script.ops.items[ctrl.while_stmt.jump_idx].jump_if_false = script.ops.items.len;
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_JUMP,
+                        .imm = .{ .as_address = ctrl.while_stmt.start_idx },
+                    }, line_offset + tokens[0].pos);
+
+                    script.ops.items[ctrl.while_stmt.jump_idx].imm.as_address = script.ops.items.len;
                 },
                 .goto => {
                     i.* += 1;
@@ -2222,7 +2247,11 @@ const ParserState = struct {
                     const label_name = tokens[i.*].kind.address_literal;
                     const jump_idx = script.ops.items.len;
 
-                    try script.appendOp(allocator, .{ .jump = 0 }, line_offset + tokens[i.*].pos);
+                    try script.appendOp(allocator, .{
+                        .code = c.BASIC26_OPCODE_JUMP,
+                        .imm = .{ .as_address = 0 },
+                    }, line_offset + tokens[i.*].pos);
+
                     try this.pending_jumps.append(allocator, .{
                         .op_index = jump_idx,
                         .label_name = label_name,
@@ -2241,7 +2270,11 @@ const ParserState = struct {
                 i.* += 2;
 
                 try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
-                try script.appendOp(allocator, .{ .store = id }, line_offset + tokens[0].pos);
+
+                try script.appendOp(allocator, .{
+                    .code = c.BASIC26_OPCODE_STORE,
+                    .imm = .{ .as_symbol = id },
+                }, line_offset + tokens[0].pos);
             } else {
                 // Function call: `ident expr, expr, ...`
                 const id = try script.parseSymbol(allocator, tokens[0].kind.ident, limits);
@@ -2266,8 +2299,15 @@ const ParserState = struct {
                     return Script.ParseError.TooManyArgs;
                 }
 
-                try script.appendOp(allocator, .{ .push_int = @intCast(args_count) }, line_offset + tokens[0].pos);
-                try script.appendOp(allocator, .{ .call = id }, line_offset + tokens[0].pos);
+                try script.appendOp(allocator, .{
+                    .code = c.BASIC26_OPCODE_PUSH_INT,
+                    .imm = .{ .as_int = @intCast(args_count) },
+                }, line_offset + tokens[0].pos);
+
+                try script.appendOp(allocator, .{
+                    .code = c.BASIC26_OPCODE_CALL,
+                    .imm = .{ .as_symbol = id },
+                }, line_offset + tokens[0].pos);
             }
         } else if (tokens[0].kind == .symbol_literal) {
             if (i.* + 1 < tokens.len) {
@@ -2276,7 +2316,10 @@ const ParserState = struct {
 
             const id = try script.strings.getOrPut(allocator, tokens[0].kind.symbol_literal);
 
-            try script.appendOp(allocator, .{ .push_symbol = id }, line_offset + tokens[0].pos);
+            try script.appendOp(allocator, .{
+                .code = c.BASIC26_OPCODE_PUSH_SYMBOL,
+                .imm = .{ .as_symbol = id },
+            }, line_offset + tokens[0].pos);
         }
     }
 };
@@ -2429,12 +2472,275 @@ export fn basic26_Script_compile(
         };
 
         switch (pj.kind) {
-            .jump => script.ops.items[pj.op_index].jump = ip,
-            .push_address => script.ops.items[pj.op_index].push_address = ip,
+            .jump => script.ops.items[pj.op_index].imm.as_address = ip,
+            .push_address => script.ops.items[pj.op_index].imm.as_address = ip,
         }
     }
 
     return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_get_op(
+    c_script: ?*const c.basic26_Script,
+    pos: usize,
+    out: ?*c.basic26_Op,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+    std.debug.assert(out != null);
+
+    const script: *const Script = @ptrCast(@alignCast(c_script.?));
+
+    if (pos >= script.ops.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    out.?.* = script.ops.items[pos];
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_set_op(
+    c_script: ?*c.basic26_Script,
+    pos: usize,
+    op: c.basic26_Op,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+
+    if (pos >= script.ops.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    script.ops.items[pos] = op;
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_push_op(
+    c_script: ?*c.basic26_Script,
+    c_vm: ?*c.basic26_Vm,
+    op: c.basic26_Op,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+    std.debug.assert(c_vm != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+
+    script.ops.append(vm.allocator.allocator(), op) catch {
+        return c.BASIC26_RESULT_OUT_OF_MEMORY;
+    };
+    errdefer _ = script.ops.pop();
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_insert_op(
+    c_script: ?*c.basic26_Script,
+    c_vm: ?*c.basic26_Vm,
+    pos: usize,
+    op: c.basic26_Op,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+    std.debug.assert(c_vm != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+
+    if (pos > script.ops.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    script.ops.insert(vm.allocator.allocator(), pos, op) catch {
+        return c.BASIC26_RESULT_OUT_OF_MEMORY;
+    };
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_pop_op(
+    c_script: ?*c.basic26_Script,
+    out: ?*c.basic26_Op,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+
+    if (script.ops.items.len == 0) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    if (out != null) {
+        out.?.* = script.ops.pop().?;
+    } else {
+        _ = script.ops.pop().?;
+    }
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_remove_op(
+    c_script: ?*c.basic26_Script,
+    pos: usize,
+    out: ?*c.basic26_Op,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+
+    if (script.ops.items.len == 0 or pos >= script.ops.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    if (out != null) {
+        out.?.* = script.ops.orderedRemove(pos);
+    } else {
+        _ = script.ops.orderedRemove(pos);
+    }
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_count_ops(
+    c_script: ?*const c.basic26_Script,
+) callconv(.c) usize {
+    std.debug.assert(c_script != null);
+
+    const script: *const Script = @ptrCast(@alignCast(c_script.?));
+
+    return script.ops.items.len;
+}
+
+export fn basic26_Script_get_source_pos(
+    c_script: ?*const c.basic26_Script,
+    ip: usize,
+    out: ?*usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+    std.debug.assert(out != null);
+
+    const script: *const Script = @ptrCast(@alignCast(c_script.?));
+
+    if (ip >= script.ops_source_map.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    out.?.* = script.ops_source_map.items[ip];
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_set_source_pos(
+    c_script: ?*c.basic26_Script,
+    ip: usize,
+    pos: usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+
+    if (ip >= script.ops_source_map.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    script.ops_source_map.items[ip] = pos;
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_push_source_pos(
+    c_script: ?*c.basic26_Script,
+    c_vm: ?*c.basic26_Vm,
+    pos: usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+    std.debug.assert(c_vm != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+
+    script.ops_source_map.append(vm.allocator.allocator(), pos) catch {
+        return c.BASIC26_RESULT_OUT_OF_MEMORY;
+    };
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_insert_source_pos(
+    c_script: ?*c.basic26_Script,
+    c_vm: ?*c.basic26_Vm,
+    ip: usize,
+    pos: usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+    std.debug.assert(c_vm != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+
+    if (ip > script.ops_source_map.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    script.ops_source_map.insert(vm.allocator.allocator(), ip, pos) catch {
+        return c.BASIC26_RESULT_OUT_OF_MEMORY;
+    };
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_pop_source_pos(
+    c_script: ?*c.basic26_Script,
+    out: ?*usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+
+    if (script.ops_source_map.items.len == 0) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    const val = script.ops_source_map.pop().?;
+
+    if (out != null) {
+        out.?.* = val;
+    }
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_remove_source_pos(
+    c_script: ?*c.basic26_Script,
+    ip: usize,
+    out: ?*usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+
+    if (script.ops_source_map.items.len == 0 or ip >= script.ops_source_map.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    const val = script.ops_source_map.orderedRemove(ip);
+
+    if (out != null) {
+        out.?.* = val;
+    }
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_count_source_pos(
+    c_script: ?*const c.basic26_Script,
+) callconv(.c) usize {
+    std.debug.assert(c_script != null);
+
+    const script: *const Script = @ptrCast(@alignCast(c_script.?));
+
+    return script.ops_source_map.items.len;
 }
 
 export fn basic26_Script_get_label(
@@ -2458,23 +2764,54 @@ export fn basic26_Script_get_label(
     return c.BASIC26_RESULT_OK;
 }
 
-export fn basic26_Script_get_op_pos(
-    c_script: ?*const c.basic26_Script,
+export fn basic26_Script_set_label(
+    c_script: ?*c.basic26_Script,
+    c_vm: ?*c.basic26_Vm,
+    name: ?[*]const u8,
+    name_len: usize,
     ip: usize,
-    out: ?*usize,
 ) callconv(.c) c.basic26_Result {
     std.debug.assert(c_script != null);
-    std.debug.assert(out != null);
+    std.debug.assert(c_vm != null);
+    std.debug.assert(name != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+    const label_name = name.?[0..name_len];
+
+    script.labels.put(vm.allocator.allocator(), label_name, ip) catch {
+        return c.BASIC26_RESULT_OUT_OF_MEMORY;
+    };
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_remove_label(
+    c_script: ?*c.basic26_Script,
+    name: ?[*]const u8,
+    name_len: usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_script != null);
+    std.debug.assert(name != null);
+
+    const script: *Script = @ptrCast(@alignCast(c_script.?));
+    const label_name = name.?[0..name_len];
+
+    if (script.labels.remove(label_name)) {
+        return c.BASIC26_RESULT_OK;
+    }
+
+    return c.BASIC26_RESULT_NOT_FOUND;
+}
+
+export fn basic26_Script_count_labels(
+    c_script: ?*const c.basic26_Script,
+) callconv(.c) usize {
+    std.debug.assert(c_script != null);
 
     const script: *const Script = @ptrCast(@alignCast(c_script.?));
 
-    if (ip >= script.ops_source_map.items.len) {
-        return c.BASIC26_RESULT_NOT_FOUND;
-    }
-
-    out.?.* = script.ops_source_map.items[ip];
-
-    return c.BASIC26_RESULT_OK;
+    return script.labels.count();
 }
 
 export fn basic26_Script_dump(
@@ -3830,7 +4167,7 @@ test "Get OP pos" {
     try expectEnum(c.BASIC26_RUNTIME_ERROR_TYPE_MISMATCH, run_error.code);
 
     var pos: usize = 0;
-    _ = c.basic26_Script_get_op_pos(c_script.?, run_error.ip, &pos);
+    _ = c.basic26_Script_get_source_pos(c_script.?, run_error.ip, &pos);
 
     try std.testing.expectEqual(12, pos);
 }

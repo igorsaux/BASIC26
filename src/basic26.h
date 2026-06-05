@@ -933,6 +933,261 @@ extern "C"
     BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_compile(basic26_Script *BASIC26_NONNULL script, const basic26_CompileOptions *BASIC26_NONNULL options, basic26_CompileErrorInfo *BASIC26_NONNULL error_out);
 
     /**
+     * @brief Bytecode opcodes used by the VM.
+     *
+     * Each instruction in a compiled script has a code field set to one of
+     * these values. The opcode determines which union member of
+     * `basic26_Immediate` is valid in the accompanying `imm` field.
+     *
+     * Opcodes that carry an immediate value use the `imm` field as follows:
+     *
+     * | Opcode                | `imm` member  | Description                        |
+     * |:----------------------|:-------------|:------------------------------------|
+     * | PUSH_INT              | as_int       | Push an integer literal.            |
+     * | PUSH_FLOAT            | as_float     | Push a float literal.               |
+     * | PUSH_STRING           | as_string    | Push an interned string by ID.      |
+     * | PUSH_SYMBOL           | as_symbol    | Push a symbol by ID.                |
+     * | PUSH_ADDRESS          | as_address   | Push a label address (IP).          |
+     * | PUSH_NULL             | (unused)     | Push null.                          |
+     * | LOAD                  | as_symbol    | Load a variable by symbol ID.       |
+     * | STORE                 | as_symbol    | Store to a variable by symbol ID.   |
+     * | ADD..REM, NEG         | (unused)     | Arithmetic / unary ops.             |
+     * | EQ..GTE               | (unused)     | Comparison ops.                     |
+     * | BOOL_AND..BOOL_NOT    | (unused)     | Boolean logic ops.                  |
+     * | BIT_AND..BIT_NOT      | (unused)     | Bitwise ops.                        |
+     * | SHL, SHR              | (unused)     | Bit shift ops.                      |
+     * | JUMP                  | as_address   | Unconditional jump to IP.           |
+     * | JUMP_IF_FALSE         | as_address   | Jump to IP if top-of-stack is falsy.|
+     * | CALL                  | as_symbol    | Call native function by symbol ID.  |
+     * | POP                   | (unused)     | Discard top-of-stack.               |
+     */
+    typedef enum basic26_Opcode
+    {
+        BASIC26_OPCODE_UNDEFINED = 0,
+        BASIC26_OPCODE_PUSH_INT = 1,
+        BASIC26_OPCODE_PUSH_FLOAT = 2,
+        BASIC26_OPCODE_PUSH_STRING = 3,
+        BASIC26_OPCODE_PUSH_SYMBOL = 4,
+        BASIC26_OPCODE_PUSH_ADDRESS = 5,
+        BASIC26_OPCODE_PUSH_NULL = 6,
+        BASIC26_OPCODE_LOAD = 7,
+        BASIC26_OPCODE_STORE = 8,
+        BASIC26_OPCODE_ADD = 9,
+        BASIC26_OPCODE_SUB = 10,
+        BASIC26_OPCODE_MUL = 11,
+        BASIC26_OPCODE_DIV = 12,
+        BASIC26_OPCODE_REM = 13,
+        BASIC26_OPCODE_NEG = 14,
+        BASIC26_OPCODE_EQ = 15,
+        BASIC26_OPCODE_NEQ = 16,
+        BASIC26_OPCODE_LT = 17,
+        BASIC26_OPCODE_GT = 18,
+        BASIC26_OPCODE_LTE = 19,
+        BASIC26_OPCODE_GTE = 20,
+        BASIC26_OPCODE_BOOL_AND = 21,
+        BASIC26_OPCODE_BOOL_OR = 22,
+        BASIC26_OPCODE_BOOL_NOT = 23,
+        BASIC26_OPCODE_BIT_AND = 24,
+        BASIC26_OPCODE_BIT_OR = 25,
+        BASIC26_OPCODE_BIT_XOR = 26,
+        BASIC26_OPCODE_BIT_NOT = 27,
+        BASIC26_OPCODE_SHL = 28,
+        BASIC26_OPCODE_SHR = 29,
+        BASIC26_OPCODE_JUMP = 30,
+        BASIC26_OPCODE_JUMP_IF_FALSE = 31,
+        BASIC26_OPCODE_CALL = 32,
+        BASIC26_OPCODE_POP = 33,
+    } basic26_Opcode;
+
+    /**
+     * @brief Immediate value union for a bytecode instruction.
+     *
+     * Which member is valid depends on the `code` field of the containing
+     * `basic26_Op`. See `basic26_Opcode` documentation for the mapping.
+     */
+    typedef union basic26_Immediate
+    {
+        basic26_IntType as_int;
+        basic26_FloatType as_float;
+        basic26_StringId as_string;
+        basic26_SymbolId as_symbol;
+        size_t as_address;
+    } basic26_Immediate;
+
+    /**
+     * @brief A single bytecode instruction.
+     *
+     * A script is a sequence of these structures. The `code` field selects
+     * the opcode and determines which member of `imm` is meaningful.
+     */
+    typedef struct basic26_Op
+    {
+        uint8_t code;
+        basic26_Immediate imm;
+    } basic26_Op;
+
+    /**
+     * @brief Reads a single bytecode instruction from a compiled script.
+     *
+     * @param [in]  script  The script instance.
+     * @param [in]  pos     Zero-based index of the instruction to read.
+     * @param [out] out     Receives the instruction.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if pos is out of range.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_get_op(const basic26_Script *BASIC26_NONNULL script, size_t pos, basic26_Op *BASIC26_NONNULL out);
+
+    /**
+     * @brief Overwrites a single bytecode instruction in a compiled script.
+     *
+     * This allows the host to patch instructions after compilation, for
+     * example to modify jump targets or immediate values.
+     *
+     * @param [in] script  The script instance.
+     * @param [in] pos     Zero-based index of the instruction to overwrite.
+     * @param [in] op      The new instruction value.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if pos is out of range.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_set_op(basic26_Script *BASIC26_NONNULL script, size_t pos, basic26_Op op);
+
+    /**
+     * @brief Appends a bytecode instruction to the end of a compiled script.
+     *
+     * This allows the host to extend a script with additional instructions.
+     *
+     * @param [in] script  The script instance.
+     * @param [in] vm      The VM instance (used for memory allocation).
+     * @param [in] op      The instruction to append.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_push_op(basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, basic26_Op op);
+
+    /**
+     * @brief Inserts a bytecode instruction at a specific position in a compiled script.
+     *
+     * Shifts existing instructions at or after `pos` to the right by one.
+     *
+     * @warning Inserting instructions changes the zero-based indices of all
+     *          subsequent instructions. Any immediate address values (e.g., in JUMP
+     *          or JUMP_IF_FALSE opcodes) or labels that refer to shifted indices
+     *          will become invalid and must be updated manually.
+     *
+     * @param [in] script  The script instance.
+     * @param [in] vm      The VM instance (used for memory allocation).
+     * @param [in] pos     Zero-based index where the instruction will be inserted.
+     *                     Can be equal to the current instruction count to append.
+     * @param [in] op      The instruction to insert.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if pos is out of range,
+     *         BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_insert_op(basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, size_t pos, basic26_Op op);
+
+    /**
+     * @brief Removes the last bytecode instruction from a compiled script.
+     *
+     * @param [in]  script  The script instance.
+     * @param [out] out     Receives the removed instruction. May be NULL if the
+     *                      removed value is not needed.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the script has no instructions.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_pop_op(basic26_Script *BASIC26_NONNULL script, basic26_Op *BASIC26_NULLABLE out);
+
+    /**
+     * @brief Removes a bytecode instruction at a specific position in a compiled script.
+     *
+     * Shifts all instructions after `pos` to the left by one, preserving their order.
+     *
+     * @warning Removing an instruction changes the zero-based indices of all
+     *          subsequent instructions. Any immediate address values (e.g., in JUMP
+     *          or JUMP_IF_FALSE opcodes) or labels that refer to shifted indices
+     *          will become invalid and must be updated manually.
+     *
+     * @param [in]  script  The script instance.
+     * @param [in]  pos     Zero-based index of the instruction to remove.
+     * @param [out] op      Receives the removed instruction. May be NULL if the
+     *                      removed value is not needed.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if pos is out of range
+     *         or the script has no instructions.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_remove_op(basic26_Script *BASIC26_NONNULL script, size_t pos, basic26_Op *BASIC26_NULLABLE op);
+
+    /**
+     * @brief Returns the number of bytecode instructions in a compiled script.
+     *
+     * @param [in] script The script instance.
+     * @return The number of instructions.
+     */
+    BASIC26_API size_t BASIC26_API_CALL basic26_Script_count_ops(const basic26_Script *BASIC26_NONNULL script);
+
+    /**
+     * @brief Gets the source code position for a given instruction pointer.
+     *
+     * @param [in]  script The script instance.
+     * @param [in]  ip     Instruction pointer (zero-based index of the opcode).
+     * @param [out] out    Receives the byte offset in the source code.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the instruction pointer is out of range.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_get_source_pos(const basic26_Script *BASIC26_NONNULL script, size_t ip, size_t *BASIC26_NONNULL out);
+
+    /**
+     * @brief Sets the source code position for a given instruction pointer.
+     *
+     * @param [in] script The script instance.
+     * @param [in] ip     Instruction pointer (zero-based index of the opcode).
+     * @param [in] pos    Byte offset in the source code.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the instruction pointer is out of range.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_set_source_pos(basic26_Script *BASIC26_NONNULL script, size_t ip, size_t pos);
+
+    /**
+     * @brief Appends a source code position to the end of the source map.
+     *
+     * @param [in] script The script instance.
+     * @param [in] vm     The VM instance (used for memory allocation).
+     * @param [in] pos    Byte offset in the source code.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_push_source_pos(basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, size_t pos);
+
+    /**
+     * @brief Inserts a source code position at a specific index.
+     *
+     * @param [in] script The script instance.
+     * @param [in] vm     The VM instance (used for memory allocation).
+     * @param [in] ip     Zero-based index where the position will be inserted.
+     * @param [in] pos    Byte offset in the source code.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if ip is out of range,
+     *         BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_insert_source_pos(basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, size_t ip, size_t pos);
+
+    /**
+     * @brief Removes the last source code position.
+     *
+     * @param [in]  script The script instance.
+     * @param [out] out    Receives the removed position. May be NULL.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the source map is empty.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_pop_source_pos(basic26_Script *BASIC26_NONNULL script, size_t *BASIC26_NULLABLE out);
+
+    /**
+     * @brief Removes a source code position at a specific index.
+     *
+     * @param [in]  script The script instance.
+     * @param [in]  ip     Zero-based index of the position to remove.
+     * @param [out] out    Receives the removed position. May be NULL.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if ip is out of range or the source map is empty.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_remove_source_pos(basic26_Script *BASIC26_NONNULL script, size_t ip, size_t *BASIC26_NULLABLE out);
+
+    /**
+     * @brief Returns the number of source code positions in the script's source map.
+     *
+     * @param [in] script The script instance.
+     * @return The number of source positions.
+     */
+    BASIC26_API size_t BASIC26_API_CALL basic26_Script_count_source_pos(const basic26_Script *BASIC26_NONNULL script);
+
+    /**
      * @brief Gets the Instruction Pointer (IP) of a label by its name.
      *
      * @param [in]  script   The script instance.
@@ -944,14 +1199,37 @@ extern "C"
     BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_get_label(const basic26_Script *BASIC26_NONNULL script, const uint8_t *BASIC26_NONNULL name, size_t name_len, size_t *BASIC26_NONNULL out);
 
     /**
-     * @brief Gets the position in the source code of the instruction.
+     * @brief Sets the instruction pointer (IP) for a label.
+     *
+     * If a label with the same name already exists, its IP is updated. Otherwise,
+     * a new label is created.
+     *
+     * @param [in] script    The script instance.
+     * @param [in] vm        The VM instance (used for memory allocation).
+     * @param [in] name      Pointer to the label name string.
+     * @param [in] name_len  Length of the label name in bytes.
+     * @param [in] ip        The instruction pointer associated with the label.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_set_label(basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, const uint8_t *BASIC26_NONNULL name, size_t name_len, size_t ip);
+
+    /**
+     * @brief Removes a label by its name.
+     *
+     * @param [in] script    The script instance.
+     * @param [in] name      Pointer to the label name string.
+     * @param [in] name_len  Length of the label name in bytes.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the label does not exist.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_remove_label(basic26_Script *BASIC26_NONNULL script, const uint8_t *BASIC26_NONNULL name, size_t name_len);
+
+    /**
+     * @brief Returns the number of labels defined in the script.
      *
      * @param [in] script The script instance.
-     * @param [in] ip Instruction pointer.
-     * @param [out] out Receives the byte position in the source code.
-     * @return Receives the on success, BASIC26_RESULT_NOT_FOUND if the instruction pointer is out of the range.
+     * @return The number of labels.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_get_op_pos(const basic26_Script *BASIC26_NONNULL script, size_t ip, size_t *BASIC26_NONNULL out);
+    BASIC26_API size_t BASIC26_API_CALL basic26_Script_count_labels(const basic26_Script *BASIC26_NONNULL script);
 
     /**
      * @brief Dumps the script bytecode to a human-readable string.
