@@ -930,7 +930,10 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
                 undefined;
 
             var ops_executed: usize = 0;
-            var ops_since_time_check: usize = if (check_time_limit) limits.time_check_interval else 0;
+            var ops_since_time_check: usize = if (comptime check_time_limit)
+                limits.time_check_interval
+            else
+                0;
 
             while (state.ip < script.ops.items.len) {
                 @prefetch(script.ops.items, .{});
@@ -2868,12 +2871,12 @@ fn setVar(c_vm: *c.basic26_Vm, c_state: *c.basic26_State, name: []const u8, valu
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_get_string_id(c_vm, name.ptr, name.len, true, &symbol_id),
+        basic26_Vm_get_string_id(c_vm, name.ptr, name.len, true, &symbol_id),
     );
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_State_set_var(c_state, symbol_id, &value),
+        basic26_State_set_var(c_state, symbol_id, &value),
     );
 }
 
@@ -2882,13 +2885,13 @@ fn getVar(c_vm: *c.basic26_Vm, c_state: *c.basic26_State, name: []const u8) !c.b
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_get_string_id(c_vm, name.ptr, name.len, true, &symbol_id),
+        basic26_Vm_get_string_id(c_vm, name.ptr, name.len, true, &symbol_id),
     );
 
     var out: c.basic26_Value = undefined;
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_State_get_var(c_state, symbol_id, &out),
+        basic26_State_get_var(c_state, symbol_id, &out),
     );
 
     return out;
@@ -2900,9 +2903,9 @@ fn printDump(c_vm: *c.basic26_Vm, c_script: *const c.basic26_Script) !void {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_dump(c_script, c_vm, &c_dump, &dump_len),
+        basic26_Script_dump(c_script, c_vm, &c_dump, &dump_len),
     );
-    defer c.basic26_Script_dump_free(c_vm, c_dump.?, dump_len);
+    defer basic26_Script_dump_free(c_vm, c_dump.?, dump_len);
 
     const dump: []const u8 = c_dump.?[0..dump_len];
 
@@ -2914,21 +2917,21 @@ test "Undefined variable" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_create(&.{ .alloc = null }, &c_vm),
+        basic26_Vm_create(&.{ .alloc = null }, &c_vm),
     );
-    defer c.basic26_Vm_destroy(c_vm.?);
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state),
+        basic26_State_create(&.{ .vm = c_vm.? }, &c_state),
     );
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -2936,7 +2939,7 @@ test "Undefined variable" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -2947,7 +2950,7 @@ test "Undefined variable" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_RUNTIME_ERROR,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -2963,21 +2966,21 @@ test "Basic arithmetics" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_create(&.{ .alloc = null }, &c_vm),
+        basic26_Vm_create(&.{ .alloc = null }, &c_vm),
     );
-    defer c.basic26_Vm_destroy(c_vm.?);
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state),
+        basic26_State_create(&.{ .vm = c_vm.? }, &c_state),
     );
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -2995,7 +2998,7 @@ test "Basic arithmetics" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3015,7 +3018,7 @@ test "Basic arithmetics" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3059,16 +3062,16 @@ test "Basic arithmetics" {
 
 test "Boolean operators" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3082,7 +3085,7 @@ test "Boolean operators" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3099,7 +3102,7 @@ test "Boolean operators" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3131,16 +3134,16 @@ test "Boolean operators" {
 
 test "Bitwise operators" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3162,7 +3165,7 @@ test "Bitwise operators" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3173,7 +3176,7 @@ test "Bitwise operators" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3191,16 +3194,16 @@ test "Bitwise operators" {
 
 test "Comparison operators" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3226,7 +3229,7 @@ test "Comparison operators" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3237,7 +3240,7 @@ test "Comparison operators" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3257,16 +3260,16 @@ test "Comparison operators" {
 
 test "If Else flow" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3341,7 +3344,7 @@ test "If Else flow" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3352,7 +3355,7 @@ test "If Else flow" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3372,16 +3375,16 @@ test "If Else flow" {
 
 test "While If ElseIf" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3405,7 +3408,7 @@ test "While If ElseIf" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3416,7 +3419,7 @@ test "While If ElseIf" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3429,16 +3432,16 @@ test "While If ElseIf" {
 
 test "While loop flow" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3453,7 +3456,7 @@ test "While loop flow" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3464,7 +3467,7 @@ test "While loop flow" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3477,16 +3480,16 @@ test "While loop flow" {
 
 test "Goto statement" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3500,7 +3503,7 @@ test "Goto statement" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3514,7 +3517,7 @@ test "Goto statement" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3528,23 +3531,23 @@ test "Goto statement" {
 
 test "Division by zero runtime error" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE = "a = 10 / 0";
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3557,7 +3560,7 @@ test "Division by zero runtime error" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_RUNTIME_ERROR,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3571,20 +3574,20 @@ test "Native negative values, NaN and Inf parsing" {
     var c_vm: ?*c.basic26_Vm = null;
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_create(&.{ .alloc = null }, &c_vm),
+        basic26_Vm_create(&.{ .alloc = null }, &c_vm),
     );
-    defer c.basic26_Vm_destroy(c_vm.?);
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state),
+        basic26_State_create(&.{ .vm = c_vm.? }, &c_state),
     );
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3600,7 +3603,7 @@ test "Native negative values, NaN and Inf parsing" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3619,7 +3622,7 @@ test "Native negative values, NaN and Inf parsing" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3699,20 +3702,20 @@ test "Functions" {
     var c_vm: ?*c.basic26_Vm = null;
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_create(&.{ .alloc = null }, &c_vm),
+        basic26_Vm_create(&.{ .alloc = null }, &c_vm),
     );
-    defer c.basic26_Vm_destroy(c_vm.?);
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state),
+        basic26_State_create(&.{ .vm = c_vm.? }, &c_state),
     );
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3726,7 +3729,7 @@ test "Functions" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3739,7 +3742,7 @@ test "Functions" {
     try setVar(c_vm.?, c_state.?, "c", .{ .type = c.BASIC26_VALUE_TYPE_NULL });
 
     var function_name: c.basic26_SymbolId = undefined;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_get_string_id(
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_get_string_id(
         c_vm.?,
         Callback.NAME.ptr,
         Callback.NAME.len,
@@ -3749,7 +3752,7 @@ test "Functions" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_register_function(c_vm.?, &.{
+        basic26_Vm_register_function(c_vm.?, &.{
             .name = function_name,
             .callback = Callback.callback,
         }),
@@ -3760,7 +3763,7 @@ test "Functions" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3776,20 +3779,20 @@ test "Symbol literal" {
     var c_vm: ?*c.basic26_Vm = null;
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_create(&.{ .alloc = null }, &c_vm),
+        basic26_Vm_create(&.{ .alloc = null }, &c_vm),
     );
-    defer c.basic26_Vm_destroy(c_vm.?);
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state),
+        basic26_State_create(&.{ .vm = c_vm.? }, &c_state),
     );
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3800,7 +3803,7 @@ test "Symbol literal" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3814,7 +3817,7 @@ test "Symbol literal" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3829,7 +3832,7 @@ test "Symbol literal" {
     try std.testing.expectEqual(10, a_val.as.int_val);
 
     var a_symbol: c.basic26_SymbolId = undefined;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_get_string_id(c_vm.?, "a", "a".len, false, &a_symbol));
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_get_string_id(c_vm.?, "a", "a".len, false, &a_symbol));
 
     try std.testing.expect(b_val.type == c.BASIC26_VALUE_TYPE_SYMBOL);
     try std.testing.expectEqual(a_symbol, b_val.as.symbol_id);
@@ -3837,16 +3840,16 @@ test "Symbol literal" {
 
 test "Operator precedence: mul before add/sub" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3859,7 +3862,7 @@ test "Operator precedence: mul before add/sub" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3875,7 +3878,7 @@ test "Operator precedence: mul before add/sub" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3891,16 +3894,16 @@ test "Operator precedence: mul before add/sub" {
 
 test "Operator precedence: arithmetic before comparison" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3913,7 +3916,7 @@ test "Operator precedence: arithmetic before comparison" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3929,7 +3932,7 @@ test "Operator precedence: arithmetic before comparison" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3945,16 +3948,16 @@ test "Operator precedence: arithmetic before comparison" {
 
 test "Operator precedence: modulo before equality" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -3966,7 +3969,7 @@ test "Operator precedence: modulo before equality" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -3981,7 +3984,7 @@ test "Operator precedence: modulo before equality" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -3996,16 +3999,16 @@ test "Operator precedence: modulo before equality" {
 
 test "Variable iteration" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
 
     _ = try vm.strings.getOrPut(vm.allocator.allocator(), "FooBar");
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     try setVar(c_vm.?, c_state.?, "a", .{
         .type = c.BASIC26_VALUE_TYPE_INT,
@@ -4031,16 +4034,16 @@ test "Variable iteration" {
     var b_found: bool = false;
     var c_found: bool = false;
 
-    while (c.basic26_State_var_next(c_state.?, prev, &it)) {
+    while (basic26_State_var_next(c_state.?, prev, &it)) {
         prev = &it;
 
         var str: ?[*]const u8 = null;
         var str_len: usize = 0;
 
-        try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_get_string(c_vm.?, it, &str, &str_len));
+        try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_get_string(c_vm.?, it, &str, &str_len));
 
         var value: c.basic26_Value = undefined;
-        try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_get_var(c_state, it, &value));
+        try expectEnum(c.BASIC26_RESULT_OK, basic26_State_get_var(c_state, it, &value));
         try expectEnum(c.BASIC26_VALUE_TYPE_INT, value.type);
 
         if (std.mem.eql(u8, str.?[0..str_len], "a")) {
@@ -4065,16 +4068,16 @@ test "Variable iteration" {
 
 test "Address literal" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -4087,7 +4090,7 @@ test "Address literal" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -4101,7 +4104,7 @@ test "Address literal" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -4110,10 +4113,10 @@ test "Address literal" {
     );
 
     var my_label_ip: usize = 0;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_get_label(c_script.?, "my_label", "my_label".len, &my_label_ip));
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_get_label(c_script.?, "my_label", "my_label".len, &my_label_ip));
 
     var end_label_ip: usize = 0;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_get_label(c_script.?, "end_label", "end_label".len, &end_label_ip));
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_get_label(c_script.?, "end_label", "end_label".len, &end_label_ip));
 
     const a_val = try getVar(c_vm.?, c_state.?, "a");
     try std.testing.expect(a_val.type == c.BASIC26_VALUE_TYPE_ADDRESS);
@@ -4126,16 +4129,16 @@ test "Address literal" {
 
 test "Get OP pos" {
     var c_vm: ?*c.basic26_Vm = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Vm_create(&.{ .alloc = null }, &c_vm));
-    defer c.basic26_Vm_destroy(c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
 
     var c_state: ?*c.basic26_State = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
-    defer c.basic26_State_destroy(c_state.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(&.{ .vm = c_vm.? }, &c_state));
+    defer basic26_State_destroy(c_state.?, c_vm.?);
 
     var c_script: ?*c.basic26_Script = null;
-    try expectEnum(c.BASIC26_RESULT_OK, c.basic26_Script_create(c_vm.?, &c_script));
-    defer c.basic26_Script_destroy(c_script.?, c_vm.?);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?, c_vm.?);
 
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
@@ -4146,7 +4149,7 @@ test "Get OP pos" {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        c.basic26_Script_compile(c_script.?, &.{
+        basic26_Script_compile(c_script.?, &.{
             .vm = c_vm.?,
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
@@ -4160,7 +4163,7 @@ test "Get OP pos" {
     var run_error: c.basic26_RuntimeErrorInfo = .{};
     try expectEnum(
         c.BASIC26_RESULT_RUNTIME_ERROR,
-        c.basic26_Vm_run(c_vm.?, &.{
+        basic26_Vm_run(c_vm.?, &.{
             .state = c_state.?,
             .script = c_script.?,
             .limits = &.{},
@@ -4171,7 +4174,7 @@ test "Get OP pos" {
     try expectEnum(c.BASIC26_RUNTIME_ERROR_TYPE_MISMATCH, run_error.code);
 
     var pos: usize = 0;
-    _ = c.basic26_Script_get_source_pos(c_script.?, run_error.ip, &pos);
+    _ = basic26_Script_get_source_pos(c_script.?, run_error.ip, &pos);
 
     try std.testing.expectEqual(12, pos);
 }
