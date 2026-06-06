@@ -826,7 +826,7 @@ export fn basic26_Vm_clear(
 export fn basic26_Vm_get_string(
     c_vm: ?*c.basic26_Vm,
     string_id: c.basic26_StringId,
-    out: ?*[*]const u8,
+    out: ?*?[*]const u8,
     out_len: ?*usize,
 ) callconv(.c) c.basic26_Result {
     std.debug.assert(c_vm != null);
@@ -1660,7 +1660,6 @@ inline fn isValidSymbol(bytes: []const u8) bool {
 const Script = struct {
     strings: *Strings,
     ops: std.ArrayList(c.basic26_Op) = .empty,
-    ops_source_map: std.ArrayList(usize) = .empty,
     labels: std.StringHashMapUnmanaged(usize) = .empty,
     parser_state: ParserState = .{},
 
@@ -1670,7 +1669,6 @@ const Script = struct {
 
     pub inline fn deinit(this: *Script, allocator: std.mem.Allocator) void {
         this.ops.deinit(allocator);
-        this.ops_source_map.deinit(allocator);
         this.labels.deinit(allocator);
         this.parser_state.deinit(allocator);
     }
@@ -1688,11 +1686,19 @@ const Script = struct {
         TooManyArgs,
     };
 
-    pub inline fn appendOp(this: *Script, allocator: std.mem.Allocator, op: c.basic26_Op, pos: usize) error{OutOfMemory}!void {
+    pub inline fn appendOp(
+        this: *Script,
+        allocator: std.mem.Allocator,
+        op: c.basic26_Op,
+        pos: usize,
+        debug_info: ?*DebugInfo,
+    ) error{OutOfMemory}!void {
         try this.ops.append(allocator, op);
         errdefer _ = this.ops.pop();
 
-        try this.ops_source_map.append(allocator, pos);
+        if (debug_info != null) {
+            try debug_info.?.ops_source_map.append(allocator, pos);
+        }
     }
 
     pub inline fn parseString(
@@ -1917,6 +1923,7 @@ const ParserState = struct {
         idx: *usize,
         limits: *const c.basic26_ScriptLimits,
         line_offset: usize,
+        debug_info: ?*DebugInfo,
     ) Script.ParseError!void {
         this.op_stack.clearRetainingCapacity();
 
@@ -1928,7 +1935,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_PUSH_INT,
                         .imm = .{ .as_int = tok.kind.int },
-                    }, line_offset + tok.pos);
+                    }, line_offset + tok.pos, debug_info);
 
                     idx.* += 1;
                 },
@@ -1936,7 +1943,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_PUSH_FLOAT,
                         .imm = .{ .as_float = tok.kind.float },
-                    }, line_offset + tok.pos);
+                    }, line_offset + tok.pos, debug_info);
 
                     idx.* += 1;
                 },
@@ -1946,7 +1953,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_PUSH_STRING,
                         .imm = .{ .as_string = id },
-                    }, line_offset + tok.pos);
+                    }, line_offset + tok.pos, debug_info);
 
                     idx.* += 1;
                 },
@@ -1956,7 +1963,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_PUSH_SYMBOL,
                         .imm = .{ .as_symbol = id },
-                    }, line_offset + tok.pos);
+                    }, line_offset + tok.pos, debug_info);
 
                     idx.* += 1;
                 },
@@ -1966,7 +1973,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_PUSH_ADDRESS,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tok.pos);
+                    }, line_offset + tok.pos, debug_info);
 
                     try this.pending_jumps.append(allocator, .{
                         .op_index = jump_idx,
@@ -1982,7 +1989,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_LOAD,
                         .imm = .{ .as_symbol = id },
-                    }, line_offset + tok.pos);
+                    }, line_offset + tok.pos, debug_info);
 
                     idx.* += 1;
                 },
@@ -1999,7 +2006,7 @@ const ParserState = struct {
 
                         try script.appendOp(allocator, .{
                             .code = @intCast(info.code),
-                        }, line_offset + tok.pos);
+                        }, line_offset + tok.pos, debug_info);
                     }
 
                     if (this.op_stack.items.len == 0) {
@@ -2032,7 +2039,9 @@ const ParserState = struct {
                                 return Script.ParseError.UnknownOperator;
                             };
 
-                            try script.appendOp(allocator, .{ .code = @intCast(popped_info.code) }, line_offset + tok.pos);
+                            try script.appendOp(allocator, .{
+                                .code = @intCast(popped_info.code),
+                            }, line_offset + tok.pos, debug_info);
                         } else {
                             break;
                         }
@@ -2043,7 +2052,10 @@ const ParserState = struct {
                 },
                 .keyword => {
                     if (tok.kind.keyword == .null) {
-                        try script.appendOp(allocator, .{ .code = c.BASIC26_OPCODE_PUSH_NULL }, line_offset + tok.pos);
+                        try script.appendOp(allocator, .{
+                            .code = c.BASIC26_OPCODE_PUSH_NULL,
+                        }, line_offset + tok.pos, debug_info);
+
                         idx.* += 1;
                     } else {
                         break;
@@ -2065,7 +2077,9 @@ const ParserState = struct {
                 return Script.ParseError.UnknownOperator;
             };
 
-            try script.appendOp(allocator, .{ .code = @intCast(info.code) }, op_str.pos);
+            try script.appendOp(allocator, .{
+                .code = @intCast(info.code),
+            }, op_str.pos, debug_info);
         }
     }
 
@@ -2077,6 +2091,7 @@ const ParserState = struct {
         i: *usize,
         limits: *const c.basic26_ScriptLimits,
         line_offset: usize,
+        debug_info: ?*DebugInfo,
     ) Script.ParseError!void {
         if (tokens.len == 0) {
             return Script.ParseError.SyntaxError;
@@ -2092,13 +2107,13 @@ const ParserState = struct {
                 .@"if" => {
                     i.* += 1;
 
-                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
+                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset, debug_info);
                     const jump_idx = script.ops.items.len;
 
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[0].pos);
+                    }, line_offset + tokens[0].pos, debug_info);
 
                     try this.ctrl_stack.append(allocator, .{
                         .if_chain = .{
@@ -2126,7 +2141,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[0].pos);
+                    }, line_offset + tokens[0].pos, debug_info);
 
                     try ctrl.if_chain.end_jumps.append(allocator, jump_end_idx);
 
@@ -2135,25 +2150,29 @@ const ParserState = struct {
                     if (is_else_if) {
                         i.* += 2;
 
-                        try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
+                        try this.parseExpr(allocator, script, tokens, i, limits, line_offset, debug_info);
                         const jump_idx = script.ops.items.len;
 
                         try script.appendOp(allocator, .{
                             .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
                             .imm = .{ .as_address = 0 },
-                        }, line_offset + tokens[1].pos);
+                        }, line_offset + tokens[1].pos, debug_info);
 
-                        try this.ctrl_stack.append(allocator, .{ .if_chain = .{
-                            .last_jump_if_false_idx = jump_idx,
-                            .last_jump_if_false_resolved = false,
-                            .end_jumps = ctrl.if_chain.end_jumps,
-                        } });
+                        try this.ctrl_stack.append(allocator, .{
+                            .if_chain = .{
+                                .last_jump_if_false_idx = jump_idx,
+                                .last_jump_if_false_resolved = false,
+                                .end_jumps = ctrl.if_chain.end_jumps,
+                            },
+                        });
                     } else {
-                        try this.ctrl_stack.append(allocator, .{ .if_chain = .{
-                            .last_jump_if_false_idx = ctrl.if_chain.last_jump_if_false_idx,
-                            .last_jump_if_false_resolved = true,
-                            .end_jumps = ctrl.if_chain.end_jumps,
-                        } });
+                        try this.ctrl_stack.append(allocator, .{
+                            .if_chain = .{
+                                .last_jump_if_false_idx = ctrl.if_chain.last_jump_if_false_idx,
+                                .last_jump_if_false_resolved = true,
+                                .end_jumps = ctrl.if_chain.end_jumps,
+                            },
+                        });
                     }
                 },
                 .elseif => {
@@ -2170,21 +2189,21 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[0].pos);
+                    }, line_offset + tokens[0].pos, debug_info);
 
                     try ctrl.if_chain.end_jumps.append(allocator, jump_end_idx);
 
                     script.ops.items[ctrl.if_chain.last_jump_if_false_idx].imm.as_address = script.ops.items.len;
 
                     i.* += 1;
-                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
+                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset, debug_info);
 
                     const jump_idx = script.ops.items.len;
 
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[0].pos);
+                    }, line_offset + tokens[0].pos, debug_info);
 
                     try this.ctrl_stack.append(allocator, .{
                         .if_chain = .{
@@ -2217,14 +2236,14 @@ const ParserState = struct {
                     const start_idx = script.ops.items.len;
                     i.* += 1;
 
-                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
+                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset, debug_info);
 
                     const jump_idx = script.ops.items.len;
 
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[0].pos);
+                    }, line_offset + tokens[0].pos, debug_info);
                     try this.ctrl_stack.append(allocator, .{ .while_stmt = .{ .start_idx = start_idx, .jump_idx = jump_idx } });
                 },
                 .endwhile => {
@@ -2239,7 +2258,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP,
                         .imm = .{ .as_address = ctrl.while_stmt.start_idx },
-                    }, line_offset + tokens[0].pos);
+                    }, line_offset + tokens[0].pos, debug_info);
 
                     script.ops.items[ctrl.while_stmt.jump_idx].imm.as_address = script.ops.items.len;
                 },
@@ -2256,7 +2275,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[i.*].pos);
+                    }, line_offset + tokens[i.*].pos, debug_info);
 
                     try this.pending_jumps.append(allocator, .{
                         .op_index = jump_idx,
@@ -2275,12 +2294,12 @@ const ParserState = struct {
 
                 i.* += 2;
 
-                try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
+                try this.parseExpr(allocator, script, tokens, i, limits, line_offset, debug_info);
 
                 try script.appendOp(allocator, .{
                     .code = c.BASIC26_OPCODE_STORE,
                     .imm = .{ .as_symbol = id },
-                }, line_offset + tokens[0].pos);
+                }, line_offset + tokens[0].pos, debug_info);
             } else {
                 // Function call: `ident expr, expr, ...`
                 const id = try script.parseSymbol(allocator, tokens[0].kind.ident, limits);
@@ -2289,7 +2308,7 @@ const ParserState = struct {
                 i.* += 1;
 
                 while (i.* < tokens.len and tokens[i.*].kind != .eof) {
-                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset);
+                    try this.parseExpr(allocator, script, tokens, i, limits, line_offset, debug_info);
                     args_count += 1;
 
                     if (i.* < tokens.len and tokens[i.*].kind != .eof) {
@@ -2308,12 +2327,12 @@ const ParserState = struct {
                 try script.appendOp(allocator, .{
                     .code = c.BASIC26_OPCODE_PUSH_INT,
                     .imm = .{ .as_int = @intCast(args_count) },
-                }, line_offset + tokens[0].pos);
+                }, line_offset + tokens[0].pos, debug_info);
 
                 try script.appendOp(allocator, .{
                     .code = c.BASIC26_OPCODE_CALL,
                     .imm = .{ .as_symbol = id },
-                }, line_offset + tokens[0].pos);
+                }, line_offset + tokens[0].pos, debug_info);
             }
         } else if (tokens[0].kind == .symbol_literal) {
             if (i.* + 1 < tokens.len) {
@@ -2325,7 +2344,7 @@ const ParserState = struct {
             try script.appendOp(allocator, .{
                 .code = c.BASIC26_OPCODE_PUSH_SYMBOL,
                 .imm = .{ .as_symbol = id },
-            }, line_offset + tokens[0].pos);
+            }, line_offset + tokens[0].pos, debug_info);
         }
     }
 };
@@ -2361,7 +2380,6 @@ export fn basic26_Script_clear(
 
     if (options.?.clear_ops) {
         script.ops.clearRetainingCapacity();
-        script.ops_source_map.clearRetainingCapacity();
     }
 
     if (options.?.clear_labels) {
@@ -2392,10 +2410,15 @@ export fn basic26_Script_compile(
 
     const vm: *Vm = @ptrCast(@alignCast(options.?.vm.?));
     const script: *Script = @ptrCast(@alignCast(c_script.?));
+    const debug_info: ?*DebugInfo = @ptrCast(@alignCast(options.?.debug_info));
     const alloc = vm.allocator.allocator();
 
     script.ops.clearRetainingCapacity();
-    script.ops_source_map.clearRetainingCapacity();
+
+    if (debug_info != null) {
+        debug_info.?.ops_source_map.clearRetainingCapacity();
+    }
+
     script.labels.clearRetainingCapacity();
 
     var ps = &script.parser_state;
@@ -2454,6 +2477,7 @@ export fn basic26_Script_compile(
             &idx,
             options.?.limits.?,
             line_offset,
+            debug_info,
         );
 
         if (parseLineResult) |_| {} else |err| {
@@ -2619,137 +2643,6 @@ export fn basic26_Script_count_ops(
     return script.ops.items.len;
 }
 
-export fn basic26_Script_get_source_pos(
-    c_script: ?*const c.basic26_Script,
-    ip: usize,
-    out: ?*usize,
-) callconv(.c) c.basic26_Result {
-    std.debug.assert(c_script != null);
-    std.debug.assert(out != null);
-
-    const script: *const Script = @ptrCast(@alignCast(c_script.?));
-
-    if (ip >= script.ops_source_map.items.len) {
-        return c.BASIC26_RESULT_NOT_FOUND;
-    }
-
-    out.?.* = script.ops_source_map.items[ip];
-
-    return c.BASIC26_RESULT_OK;
-}
-
-export fn basic26_Script_set_source_pos(
-    c_script: ?*c.basic26_Script,
-    ip: usize,
-    pos: usize,
-) callconv(.c) c.basic26_Result {
-    std.debug.assert(c_script != null);
-
-    const script: *Script = @ptrCast(@alignCast(c_script.?));
-
-    if (ip >= script.ops_source_map.items.len) {
-        return c.BASIC26_RESULT_NOT_FOUND;
-    }
-
-    script.ops_source_map.items[ip] = pos;
-
-    return c.BASIC26_RESULT_OK;
-}
-
-export fn basic26_Script_push_source_pos(
-    c_script: ?*c.basic26_Script,
-    c_vm: ?*c.basic26_Vm,
-    pos: usize,
-) callconv(.c) c.basic26_Result {
-    std.debug.assert(c_script != null);
-    std.debug.assert(c_vm != null);
-
-    const script: *Script = @ptrCast(@alignCast(c_script.?));
-    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
-
-    script.ops_source_map.append(vm.allocator.allocator(), pos) catch {
-        return c.BASIC26_RESULT_OUT_OF_MEMORY;
-    };
-
-    return c.BASIC26_RESULT_OK;
-}
-
-export fn basic26_Script_insert_source_pos(
-    c_script: ?*c.basic26_Script,
-    c_vm: ?*c.basic26_Vm,
-    ip: usize,
-    pos: usize,
-) callconv(.c) c.basic26_Result {
-    std.debug.assert(c_script != null);
-    std.debug.assert(c_vm != null);
-
-    const script: *Script = @ptrCast(@alignCast(c_script.?));
-    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
-
-    if (ip > script.ops_source_map.items.len) {
-        return c.BASIC26_RESULT_NOT_FOUND;
-    }
-
-    script.ops_source_map.insert(vm.allocator.allocator(), ip, pos) catch {
-        return c.BASIC26_RESULT_OUT_OF_MEMORY;
-    };
-
-    return c.BASIC26_RESULT_OK;
-}
-
-export fn basic26_Script_pop_source_pos(
-    c_script: ?*c.basic26_Script,
-    out: ?*usize,
-) callconv(.c) c.basic26_Result {
-    std.debug.assert(c_script != null);
-
-    const script: *Script = @ptrCast(@alignCast(c_script.?));
-
-    if (script.ops_source_map.items.len == 0) {
-        return c.BASIC26_RESULT_NOT_FOUND;
-    }
-
-    const val = script.ops_source_map.pop().?;
-
-    if (out != null) {
-        out.?.* = val;
-    }
-
-    return c.BASIC26_RESULT_OK;
-}
-
-export fn basic26_Script_remove_source_pos(
-    c_script: ?*c.basic26_Script,
-    ip: usize,
-    out: ?*usize,
-) callconv(.c) c.basic26_Result {
-    std.debug.assert(c_script != null);
-
-    const script: *Script = @ptrCast(@alignCast(c_script.?));
-
-    if (script.ops_source_map.items.len == 0 or ip >= script.ops_source_map.items.len) {
-        return c.BASIC26_RESULT_NOT_FOUND;
-    }
-
-    const val = script.ops_source_map.orderedRemove(ip);
-
-    if (out != null) {
-        out.?.* = val;
-    }
-
-    return c.BASIC26_RESULT_OK;
-}
-
-export fn basic26_Script_count_source_pos(
-    c_script: ?*const c.basic26_Script,
-) callconv(.c) usize {
-    std.debug.assert(c_script != null);
-
-    const script: *const Script = @ptrCast(@alignCast(c_script.?));
-
-    return script.ops_source_map.items.len;
-}
-
 export fn basic26_Script_get_label(
     c_script: ?*const c.basic26_Script,
     name: ?[*]const u8,
@@ -2860,6 +2753,195 @@ export fn basic26_Script_dump_free(
     const dump: []u8 = c_dump.?[0..dump_len];
 
     vm.allocator.allocator().free(dump);
+}
+
+const DebugInfo = struct {
+    ops_source_map: std.ArrayList(usize) = .empty,
+
+    pub inline fn deinit(this: *DebugInfo, allocator: std.mem.Allocator) void {
+        this.ops_source_map.deinit(allocator);
+    }
+};
+
+export fn basic26_DebugInfo_create(
+    c_vm: ?*c.basic26_Vm,
+    out: ?*?*c.basic26_DebugInfo,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_vm != null);
+    std.debug.assert(out != null);
+
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+    const debug_info = vm.allocator.allocator().create(DebugInfo) catch {
+        return c.BASIC26_RESULT_OUT_OF_MEMORY;
+    };
+
+    debug_info.* = .{
+        .ops_source_map = .empty,
+    };
+
+    out.?.* = @ptrCast(@alignCast(debug_info));
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_DebugInfo_destroy(
+    c_debug_info: ?*c.basic26_DebugInfo,
+    c_vm: ?*c.basic26_Vm,
+) callconv(.c) void {
+    std.debug.assert(c_vm != null);
+
+    if (c_debug_info == null) {
+        return;
+    }
+
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+    const allocator = vm.allocator.allocator();
+
+    const debug_info: *DebugInfo = @ptrCast(@alignCast(c_debug_info.?));
+
+    debug_info.deinit(allocator);
+    allocator.destroy(debug_info);
+}
+
+export fn basic26_DebugInfo_clear(
+    c_debug_info: ?*c.basic26_DebugInfo,
+) callconv(.c) void {
+    std.debug.assert(c_debug_info != null);
+
+    const debug_info: *DebugInfo = @ptrCast(@alignCast(c_debug_info.?));
+
+    debug_info.ops_source_map.clearRetainingCapacity();
+}
+
+export fn basic26_DebugInfo_get_source_pos(
+    c_debug_info: ?*const c.basic26_DebugInfo,
+    ip: usize,
+    out: ?*usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_debug_info != null);
+    std.debug.assert(out != null);
+
+    const debug_info: *const DebugInfo = @ptrCast(@alignCast(c_debug_info.?));
+
+    if (ip >= debug_info.ops_source_map.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    out.?.* = debug_info.ops_source_map.items[ip];
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_DebugInfo_set_source_pos(
+    c_debug_info: ?*c.basic26_DebugInfo,
+    ip: usize,
+    pos: usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_debug_info != null);
+
+    const debug_info: *DebugInfo = @ptrCast(@alignCast(c_debug_info.?));
+
+    if (ip >= debug_info.ops_source_map.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    debug_info.ops_source_map.items[ip] = pos;
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_DebugInfo_push_source_pos(
+    c_debug_info: ?*c.basic26_DebugInfo,
+    c_vm: ?*c.basic26_Vm,
+    pos: usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_debug_info != null);
+    std.debug.assert(c_vm != null);
+
+    const debug_info: *DebugInfo = @ptrCast(@alignCast(c_debug_info.?));
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+
+    debug_info.ops_source_map.append(vm.allocator.allocator(), pos) catch {
+        return c.BASIC26_RESULT_OUT_OF_MEMORY;
+    };
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_DebugInfo_insert_source_pos(
+    c_debug_info: ?*c.basic26_DebugInfo,
+    c_vm: ?*c.basic26_Vm,
+    ip: usize,
+    pos: usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_debug_info != null);
+    std.debug.assert(c_vm != null);
+
+    const debug_info: *DebugInfo = @ptrCast(@alignCast(c_debug_info.?));
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+
+    if (ip > debug_info.ops_source_map.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    debug_info.ops_source_map.insert(vm.allocator.allocator(), ip, pos) catch {
+        return c.BASIC26_RESULT_OUT_OF_MEMORY;
+    };
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_DebugInfo_pop_source_pos(
+    c_debug_info: ?*c.basic26_DebugInfo,
+    out: ?*usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_debug_info != null);
+
+    const debug_info: *DebugInfo = @ptrCast(@alignCast(c_debug_info.?));
+
+    if (debug_info.ops_source_map.items.len == 0) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    const val = debug_info.ops_source_map.pop().?;
+
+    if (out != null) {
+        out.?.* = val;
+    }
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_DebugInfo_remove_source_pos(
+    c_debug_info: ?*c.basic26_DebugInfo,
+    ip: usize,
+    out: ?*usize,
+) callconv(.c) c.basic26_Result {
+    std.debug.assert(c_debug_info != null);
+
+    const debug_info: *DebugInfo = @ptrCast(@alignCast(c_debug_info.?));
+
+    if (debug_info.ops_source_map.items.len == 0 or ip >= debug_info.ops_source_map.items.len) {
+        return c.BASIC26_RESULT_NOT_FOUND;
+    }
+
+    const val = debug_info.ops_source_map.orderedRemove(ip);
+
+    if (out != null) {
+        out.?.* = val;
+    }
+
+    return c.BASIC26_RESULT_OK;
+}
+
+export fn basic26_Script_count_source_pos(
+    c_debug_info: ?*const c.basic26_DebugInfo,
+) callconv(.c) usize {
+    std.debug.assert(c_debug_info != null);
+
+    const debug_info: *const DebugInfo = @ptrCast(@alignCast(c_debug_info.?));
+
+    return debug_info.ops_source_map.items.len;
 }
 
 fn expectEnum(expected: c_int, actual: c_uint) !void {
@@ -4140,6 +4222,10 @@ test "Get OP pos" {
     try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
     defer basic26_Script_destroy(c_script.?, c_vm.?);
 
+    var c_debug_info: ?*c.basic26_DebugInfo = null;
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_DebugInfo_create(c_vm.?, &c_debug_info));
+    defer basic26_DebugInfo_destroy(c_debug_info.?, c_vm.?);
+
     var compile_error: c.basic26_CompileErrorInfo = .{};
 
     const SOURCE =
@@ -4154,6 +4240,7 @@ test "Get OP pos" {
             .source = SOURCE.ptr,
             .source_len = SOURCE.len,
             .limits = &.{},
+            .debug_info = c_debug_info.?,
         }, &compile_error),
     );
 
@@ -4174,7 +4261,7 @@ test "Get OP pos" {
     try expectEnum(c.BASIC26_RUNTIME_ERROR_TYPE_MISMATCH, run_error.code);
 
     var pos: usize = 0;
-    _ = basic26_Script_get_source_pos(c_script.?, run_error.ip, &pos);
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_DebugInfo_get_source_pos(c_debug_info.?, run_error.ip, &pos));
 
     try std.testing.expectEqual(12, pos);
 }

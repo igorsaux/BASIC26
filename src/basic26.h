@@ -906,6 +906,15 @@ extern "C"
     BASIC26_API basic26_CompileErrorInfo BASIC26_API_CALL basic26_CompileErrorInfo_zeroed(void);
 
     /**
+     * @brief Opaque handle to debug information for a compiled script.
+     *
+     * Created by `basic26_DebugInfo_create()`, destroyed by `basic26_DebugInfo_destroy()`.
+     * A DebugInfo instance holds the source mapping (instruction pointer to source byte offset).
+     * It is populated during compilation if passed via `basic26_CompileOptions.debug_info`.
+     */
+    typedef struct basic26_DebugInfo basic26_DebugInfo;
+
+    /**
      * @brief Options for compiling a script.
      */
     typedef struct basic26_CompileOptions
@@ -914,6 +923,7 @@ extern "C"
         const uint8_t *BASIC26_NONNULL source;              /**< [in] Source code string. */
         size_t source_len;                                  /**< [in] Length of source code in bytes. */
         const basic26_ScriptLimits *BASIC26_NONNULL limits; /**< [in] Compilation limits. */
+        basic26_DebugInfo *BASIC26_NULLABLE debug_info;     /**< [in] Debug info instance to populate with source positions. If NULL, source positions are not recorded. */
     } basic26_CompileOptions;
 
     /**
@@ -1119,75 +1129,6 @@ extern "C"
     BASIC26_API size_t BASIC26_API_CALL basic26_Script_count_ops(const basic26_Script *BASIC26_NONNULL script);
 
     /**
-     * @brief Gets the source code position for a given instruction pointer.
-     *
-     * @param [in]  script The script instance.
-     * @param [in]  ip     Instruction pointer (zero-based index of the opcode).
-     * @param [out] out    Receives the byte offset in the source code.
-     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the instruction pointer is out of range.
-     */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_get_source_pos(const basic26_Script *BASIC26_NONNULL script, size_t ip, size_t *BASIC26_NONNULL out);
-
-    /**
-     * @brief Sets the source code position for a given instruction pointer.
-     *
-     * @param [in] script The script instance.
-     * @param [in] ip     Instruction pointer (zero-based index of the opcode).
-     * @param [in] pos    Byte offset in the source code.
-     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the instruction pointer is out of range.
-     */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_set_source_pos(basic26_Script *BASIC26_NONNULL script, size_t ip, size_t pos);
-
-    /**
-     * @brief Appends a source code position to the end of the source map.
-     *
-     * @param [in] script The script instance.
-     * @param [in] vm     The VM instance (used for memory allocation).
-     * @param [in] pos    Byte offset in the source code.
-     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
-     */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_push_source_pos(basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, size_t pos);
-
-    /**
-     * @brief Inserts a source code position at a specific index.
-     *
-     * @param [in] script The script instance.
-     * @param [in] vm     The VM instance (used for memory allocation).
-     * @param [in] ip     Zero-based index where the position will be inserted.
-     * @param [in] pos    Byte offset in the source code.
-     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if ip is out of range,
-     *         BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
-     */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_insert_source_pos(basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, size_t ip, size_t pos);
-
-    /**
-     * @brief Removes the last source code position.
-     *
-     * @param [in]  script The script instance.
-     * @param [out] out    Receives the removed position. May be NULL.
-     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the source map is empty.
-     */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_pop_source_pos(basic26_Script *BASIC26_NONNULL script, size_t *BASIC26_NULLABLE out);
-
-    /**
-     * @brief Removes a source code position at a specific index.
-     *
-     * @param [in]  script The script instance.
-     * @param [in]  ip     Zero-based index of the position to remove.
-     * @param [out] out    Receives the removed position. May be NULL.
-     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if ip is out of range or the source map is empty.
-     */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_remove_source_pos(basic26_Script *BASIC26_NONNULL script, size_t ip, size_t *BASIC26_NULLABLE out);
-
-    /**
-     * @brief Returns the number of source code positions in the script's source map.
-     *
-     * @param [in] script The script instance.
-     * @return The number of source positions.
-     */
-    BASIC26_API size_t BASIC26_API_CALL basic26_Script_count_source_pos(const basic26_Script *BASIC26_NONNULL script);
-
-    /**
      * @brief Gets the Instruction Pointer (IP) of a label by its name.
      *
      * @param [in]  script   The script instance.
@@ -1250,6 +1191,101 @@ extern "C"
      * @param [in] dump_len Length of the string to free.
      */
     BASIC26_API void BASIC26_API_CALL basic26_Script_dump_free(basic26_Vm *BASIC26_NONNULL vm, uint8_t *BASIC26_NULLABLE dump, size_t dump_len);
+
+    /**
+     * @brief Creates a new debug info instance.
+     *
+     * @param [in]  vm   The VM instance.
+     * @param [out] out  Receives the debug info handle.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_create(basic26_Vm *BASIC26_NONNULL vm, basic26_DebugInfo * BASIC26_NULLABLE * BASIC26_NONNULL out);
+
+    /**
+     * @brief Destroys a debug info instance.
+     *
+     * @param [in] debug_info The debug info instance to destroy. May be NULL (no-op).
+     * @param [in] vm         The VM instance.
+     */
+    BASIC26_API void BASIC26_API_CALL basic26_DebugInfo_destroy(basic26_DebugInfo *BASIC26_NONNULL debug_info, basic26_Vm *BASIC26_NONNULL vm);
+
+    /**
+     * @brief Clears debug info resources.
+     *
+     * Resets the internal data structures while retaining their allocated capacity.
+     *
+     * @param [in] debug_info The debug info instance.
+     */
+    BASIC26_API void BASIC26_API_CALL basic26_DebugInfo_clear(basic26_DebugInfo *BASIC26_NONNULL debug_info);
+
+    /**
+     * @brief Gets the source code position for a given instruction pointer.
+     *
+     * @param [in]  debug_info The debug info instance.
+     * @param [in]  ip         Instruction pointer (zero-based index of the opcode).
+     * @param [out] out        Receives the byte offset in the source code.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the instruction pointer is out of range.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_get_source_pos(const basic26_DebugInfo *BASIC26_NONNULL debug_info, size_t ip, size_t *BASIC26_NONNULL out);
+
+    /**
+     * @brief Sets the source code position for a given instruction pointer.
+     *
+     * @param [in] debug_info The debug info instance.
+     * @param [in] ip         Instruction pointer (zero-based index of the opcode).
+     * @param [in] pos        Byte offset in the source code.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the instruction pointer is out of range.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_set_source_pos(basic26_DebugInfo *BASIC26_NONNULL debug_info, size_t ip, size_t pos);
+
+    /**
+     * @brief Appends a source code position to the end of the source map.
+     *
+     * @param [in] debug_info The script instance.
+     * @param [in] vm         The VM instance (used for memory allocation).
+     * @param [in] pos        Byte offset in the source code.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_push_source_pos(basic26_DebugInfo *BASIC26_NONNULL debug_info, basic26_Vm *BASIC26_NONNULL vm, size_t pos);
+
+    /**
+     * @brief Inserts a source code position at a specific index.
+     *
+     * @param [in] debug_info The debug info instance.
+     * @param [in] vm         The VM instance (used for memory allocation).
+     * @param [in] ip         Zero-based index where the position will be inserted.
+     * @param [in] pos        Byte offset in the source code.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if ip is out of range,
+     *         BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_insert_source_pos(basic26_DebugInfo *BASIC26_NONNULL debug_info, basic26_Vm *BASIC26_NONNULL vm, size_t ip, size_t pos);
+
+    /**
+     * @brief Removes the last source code position.
+     *
+     * @param [in]  debug_info The debug info instance.
+     * @param [out] out        Receives the removed position. May be NULL.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if the source map is empty.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_pop_source_pos(basic26_DebugInfo *BASIC26_NONNULL debug_info, size_t *BASIC26_NULLABLE out);
+
+    /**
+     * @brief Removes a source code position at a specific index.
+     *
+     * @param [in]  debug_info The debug info instance.
+     * @param [in]  ip         Zero-based index of the position to remove.
+     * @param [out] out        Receives the removed position. May be NULL.
+     * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if ip is out of range or the source map is empty.
+     */
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_remove_source_pos(basic26_DebugInfo *BASIC26_NONNULL debug_info, size_t ip, size_t *BASIC26_NULLABLE out);
+
+    /**
+     * @brief Returns the number of source code positions in the script's source map.
+     *
+     * @param [in] debug_info The debug info instance.
+     * @return The number of source positions.
+     */
+    BASIC26_API size_t BASIC26_API_CALL basic26_DebugInfo_count_source_pos(const basic26_DebugInfo *BASIC26_NONNULL debug_info);
 
 #ifdef __cplusplus
 }
