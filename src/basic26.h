@@ -474,7 +474,7 @@ extern "C"
      * @param [out] out      Receives the VM handle.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Vm_create(const basic26_CreateVmOptions *BASIC26_NONNULL options, basic26_Vm * BASIC26_NONNULL * BASIC26_NONNULL out);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Vm_create(const basic26_CreateVmOptions *BASIC26_NONNULL options, basic26_Vm * BASIC26_NULLABLE * BASIC26_NONNULL out);
 
     /**
      * @brief Destroys a Virtual Machine instance.
@@ -681,7 +681,7 @@ extern "C"
      * @param [out] out      Receives the state handle.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_State_create(const basic26_CreateStateOptions *BASIC26_NONNULL options, basic26_State * BASIC26_NONNULL * BASIC26_NONNULL out);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_State_create(const basic26_CreateStateOptions *BASIC26_NONNULL options, basic26_State * BASIC26_NULLABLE * BASIC26_NONNULL out);
 
     /**
      * @brief Destroys an execution state.
@@ -815,7 +815,7 @@ extern "C"
      * @param [out] out Receives the script handle.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_create(basic26_Vm *BASIC26_NONNULL vm, basic26_Script * BASIC26_NONNULL * BASIC26_NONNULL out);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_create(basic26_Vm *BASIC26_NONNULL vm, basic26_Script * BASIC26_NULLABLE * BASIC26_NONNULL out);
 
     /**
      * @brief Destroys a compiled script.
