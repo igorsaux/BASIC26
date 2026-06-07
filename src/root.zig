@@ -175,7 +175,6 @@ const ExecuteResult = union(enum) {
 
 const Strings = struct {
     data: std.ArrayList([]u8) = .empty,
-    str_map: std.AutoHashMapUnmanaged(usize, []const u8) = .empty,
     id_map: std.StringArrayHashMapUnmanaged(usize) = .empty,
 
     pub inline fn init() Strings {
@@ -188,13 +187,11 @@ const Strings = struct {
         }
 
         this.data.deinit(allocator);
-        this.str_map.deinit(allocator);
         this.id_map.deinit(allocator);
     }
 
     pub inline fn clear(this: *Strings) void {
         this.data.clearRetainingCapacity();
-        this.str_map.clearRetainingCapacity();
         this.id_map.clearRetainingCapacity();
     }
 
@@ -211,7 +208,6 @@ const Strings = struct {
 
         try this.data.append(allocator, string);
         try this.id_map.put(allocator, string, id);
-        try this.str_map.put(allocator, id, string);
 
         return id;
     }
@@ -237,7 +233,11 @@ const Strings = struct {
     }
 
     pub inline fn getByid(this: *const Strings, id: c.basic26_StringId) ?[]const u8 {
-        return this.str_map.get(id);
+        if (id >= this.data.items.len) {
+            return null;
+        }
+
+        return this.data.items[id];
     }
 };
 
@@ -1787,11 +1787,11 @@ const Script = struct {
                     try writer.writer.print("PUSH_FLOAT {d}\n", .{op.imm.as_float});
                 },
                 c.BASIC26_OPCODE_PUSH_STRING => {
-                    const str = this.strings.str_map.get(op.imm.as_string).?;
+                    const str = this.strings.getByid(op.imm.as_string).?;
                     try writer.writer.print("PUSH_STRING \"{s}\"\n", .{str});
                 },
                 c.BASIC26_OPCODE_PUSH_SYMBOL => {
-                    const str = this.strings.str_map.get(op.imm.as_symbol).?;
+                    const str = this.strings.getByid(op.imm.as_symbol).?;
                     try writer.writer.print("PUSH_SYMBOL \"{s}\"\n", .{str});
                 },
                 c.BASIC26_OPCODE_PUSH_ADDRESS => {
@@ -1801,11 +1801,11 @@ const Script = struct {
                     try writer.writer.print("PUSH_NULL\n", .{});
                 },
                 c.BASIC26_OPCODE_LOAD => {
-                    const str = this.strings.str_map.get(op.imm.as_symbol).?;
+                    const str = this.strings.getByid(op.imm.as_symbol).?;
                     try writer.writer.print("LOAD \"{s}\"\n", .{str});
                 },
                 c.BASIC26_OPCODE_STORE => {
-                    const str = this.strings.str_map.get(op.imm.as_symbol).?;
+                    const str = this.strings.getByid(op.imm.as_symbol).?;
                     try writer.writer.print("STORE \"{s}\"\n", .{str});
                 },
                 c.BASIC26_OPCODE_ADD => {
@@ -1878,7 +1878,7 @@ const Script = struct {
                     try writer.writer.print("JUMP_IF_FALSE {d}\n", .{op.imm.as_address});
                 },
                 c.BASIC26_OPCODE_CALL => {
-                    const str = this.strings.str_map.get(op.imm.as_symbol).?;
+                    const str = this.strings.getByid(op.imm.as_symbol).?;
                     try writer.writer.print("CALL \"{s}\"\n", .{str});
                 },
                 c.BASIC26_OPCODE_POP => {
