@@ -214,11 +214,12 @@ basic26_FunctionResult print_function(const basic26_CallInfo *info, size_t argc,
     size_t str_len = 0;
 
     const basic26_Value arg = argv[0];
+    const NativeObject *obj = NULL;
 
     switch (arg.type)
     {
     case BASIC26_VALUE_TYPE_INT:
-        printf("SCRIPT: %d\n", arg.as.int_val);
+        printf("SCRIPT: %lld\n", arg.as.int_val);
         break;
     case BASIC26_VALUE_TYPE_FLOAT:
         printf("SCRIPT: %f\n", arg.as.float_val);
@@ -248,13 +249,20 @@ basic26_FunctionResult print_function(const basic26_CallInfo *info, size_t argc,
         printf("SCRIPT: $%s\n", buf);
 
         break;
+    case BASIC26_VALUE_TYPE_ADDRESS:
+        printf("SCRIPT: @%lu\n", arg.as.address_val);
+
+        break;
     case BASIC26_VALUE_TYPE_OBJECT:
         // OBJECT values hold an opaque pointer set by the host. Here we cast
         // it back to our known NativeObject type. In a real application you
         // might want to store a type tag alongside the pointer for safety.
-        const NativeObject *obj = arg.as.object_ptr;
+        obj = arg.as.object_ptr;
+        printf("SCRIPT: (@NativeObject){ .data = %lu }\n", obj->data);
 
-        printf("SCRIPT: (@NativeObject){ .data = %d }\n", obj->data);
+        break;
+    default:
+        CHECK(false);
 
         break;
     }
@@ -427,8 +435,8 @@ void print_dump()
     printf("SCRIPT DUMP:\n%s\n", buf);
 
     // The dump string is allocated by the VM and must be freed using the
-    // dedicated basic26_Script_dump_free() function (not regular free()).
-    basic26_Script_dump_free(vm, str, str_len);
+    // dedicated basic26_Vm_free() function.
+    basic26_Vm_free(vm, str, str_len, 1);
 }
 
 // --------------------------------------------------------------------------
@@ -605,7 +613,8 @@ int main(int argc, const char **argv)
                                                            .max_time_ns = 0,
                                                        },
                                                        .userdata = NULL,
-                                                   }, &runtime_err_info);
+                                                   },
+                                               &runtime_err_info);
 
         if (result == BASIC26_RESULT_OK)
         {

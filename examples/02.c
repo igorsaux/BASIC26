@@ -152,7 +152,7 @@ void print_dump()
 
     printf("SCRIPT DUMP:\n%s\n", buf);
 
-    basic26_Script_dump_free(vm, str, str_len);
+    basic26_Vm_free(vm, str, str_len, 1);
 }
 
 void cleanup(void)

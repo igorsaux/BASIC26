@@ -484,6 +484,39 @@ extern "C"
     BASIC26_API void BASIC26_API_CALL basic26_Vm_destroy(basic26_Vm *BASIC26_NULLABLE vm);
 
     /**
+     * @brief Allocates memory using the VM's allocator.
+     *
+     * Allows host applications to allocate memory through the same allocator
+     * that the VM uses internally. If a custom allocator was provided during
+     * VM creation, that allocator will be used; otherwise the default
+     * allocator is used. This is useful when host code needs to obtain memory
+     * that can later be freed with `basic26_Vm_free()`, such as the output
+     * of `basic26_Script_dump()`.
+     *
+     * @param [in] vm        The VM instance.
+     * @param [in] len       Number of bytes to allocate.
+     * @param [in] alignment Required alignment in bytes.
+     * @return Pointer to allocated memory, or NULL on failure.
+     */
+    BASIC26_API void *BASIC26_NULLABLE basic26_Vm_alloc(basic26_Vm *BASIC26_NONNULL vm, size_t len, size_t alignment);
+
+    /**
+     * @brief Frees memory previously allocated by the VM's allocator.
+     *
+     * Releases memory that was allocated either internally by the VM or
+     * externally via `basic26_Vm_alloc()`. The `len` and `alignment`
+     * parameters must match the values used when the memory was allocated.
+     * This function is the correct way to free strings returned by
+     * `basic26_Script_dump()`.
+     *
+     * @param [in] vm        The VM instance.
+     * @param [in] ptr       Pointer to memory to free. May be NULL (no-op).
+     * @param [in] len       Size of the allocation in bytes.
+     * @param [in] alignment Alignment of the allocation in bytes.
+     */
+    BASIC26_API void basic26_Vm_free(basic26_Vm *BASIC26_NONNULL vm, void *BASIC26_NULLABLE ptr, size_t len, size_t alignment);
+
+    /**
      * @brief Options for clearing VM resources.
      *
      * @note The `_clear` functions do NOT free memory. They only reset the internal
@@ -1177,20 +1210,11 @@ extern "C"
      *
      * @param [in]  script   The script instance.
      * @param [in]  vm       The VM instance.
-     * @param [out] out      Receives a pointer to the allocated string.
+     * @param [out] out      Receives a pointer to the allocated string. The data shoule be freed using `basic26_Vm_free`.
      * @param [out] out_len  Receives the length of the string in bytes.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
     BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_dump(const basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, uint8_t *BASIC26_NONNULL *BASIC26_NONNULL out, size_t *BASIC26_NONNULL out_len);
-
-    /**
-     * @brief Frees the memory allocated by basic26_Script_dump.
-     *
-     * @param [in] vm       The VM instance.
-     * @param [in] dump     Pointer to the string to free. May be NULL (no-op).
-     * @param [in] dump_len Length of the string to free.
-     */
-    BASIC26_API void BASIC26_API_CALL basic26_Script_dump_free(basic26_Vm *BASIC26_NONNULL vm, uint8_t *BASIC26_NULLABLE dump, size_t dump_len);
 
     /**
      * @brief Creates a new debug info instance.

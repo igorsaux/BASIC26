@@ -801,6 +801,36 @@ export fn basic26_Vm_destroy(c_vm: ?*c.basic26_Vm) callconv(.c) void {
     allocator.allocator().destroy(vm);
 }
 
+export fn basic26_Vm_alloc(
+    c_vm: ?*c.basic26_Vm,
+    len: usize,
+    alignment: usize,
+) callconv(.c) ?*anyopaque {
+    std.debug.assert(c_vm != null);
+
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+
+    return vm.allocator.allocator().rawAlloc(len, .fromByteUnits(alignment), 0);
+}
+
+export fn basic26_Vm_free(
+    c_vm: ?*c.basic26_Vm,
+    ptr: ?*anyopaque,
+    len: usize,
+    alignment: usize,
+) callconv(.c) void {
+    std.debug.assert(c_vm != null);
+
+    if (ptr == null) {
+        return;
+    }
+
+    const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
+    const memory: []u8 = @as([*]u8, @ptrCast(@alignCast(ptr.?)))[0..len];
+
+    vm.allocator.allocator().rawFree(memory, .fromByteUnits(alignment), 0);
+}
+
 export fn basic26_ClearVmOptions_zeroed() callconv(.c) c.basic26_ClearVmOptions {
     return .{};
 }
