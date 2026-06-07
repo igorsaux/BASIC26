@@ -685,6 +685,8 @@ extern "C"
 
     /**
      * @brief Executes a script.
+     * 
+     * @warning Passing a script with an invalid opcode is UB.
      *
      * @param [in] vm          The VM instance.
      * @param [in] options     Execution options.
