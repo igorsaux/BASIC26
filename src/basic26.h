@@ -1233,7 +1233,7 @@ extern "C"
      * @param [in] debug_info The debug info instance to destroy. May be NULL (no-op).
      * @param [in] vm         The VM instance.
      */
-    BASIC26_API void BASIC26_API_CALL basic26_DebugInfo_destroy(basic26_DebugInfo *BASIC26_NONNULL debug_info, basic26_Vm *BASIC26_NONNULL vm);
+    BASIC26_API void BASIC26_API_CALL basic26_DebugInfo_destroy(basic26_DebugInfo *BASIC26_NULLABLE debug_info, basic26_Vm *BASIC26_NONNULL vm);
 
     /**
      * @brief Clears debug info resources.
