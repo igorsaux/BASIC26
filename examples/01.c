@@ -319,7 +319,7 @@ void print_dump()
     size_t str_len = 0;
 
     CHECK(
-        basic26_Script_dump(script, vm, &str, &str_len) == BASIC26_RESULT_OK);
+        basic26_Script_dump(script, &str, &str_len) == BASIC26_RESULT_OK);
 
     char buf[1024];
 
@@ -368,10 +368,10 @@ void cleanup()
         return;
     }
 
-    basic26_Script_destroy(script, vm);
+    basic26_Script_destroy(script);
     script = NULL;
 
-    basic26_State_destroy(state, vm);
+    basic26_State_destroy(state);
     state = NULL;
 
     basic26_Vm_destroy(vm);
@@ -384,10 +384,10 @@ int main(int argc, const char **argv)
     (void)argv;
 
     // Step 1: Create the VM.
-    CHECK(basic26_Vm_create(&(basic26_CreateVmOptions){.alloc = NULL}, &vm) == BASIC26_RESULT_OK);
+    CHECK(basic26_Vm_create(NULL, &vm) == BASIC26_RESULT_OK);
 
     // Step 2: Create an execution State.
-    CHECK(basic26_State_create(&(basic26_CreateStateOptions){.vm = vm}, &state) == BASIC26_RESULT_OK);
+    CHECK(basic26_State_create(vm, &state) == BASIC26_RESULT_OK);
 
     // Step 3: Create a Script object.
     CHECK(basic26_Script_create(vm, &script) == BASIC26_RESULT_OK);
@@ -397,7 +397,6 @@ int main(int argc, const char **argv)
 
     CHECK(
         basic26_Script_compile(script, &(basic26_CompileOptions){
-                                           .vm = vm,
                                            .source = (const uint8_t *)SOURCE,
                                            .source_len = strlen(SOURCE),
                                            .limits = &(basic26_ScriptLimits){

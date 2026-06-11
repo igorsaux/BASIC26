@@ -440,9 +440,9 @@ extern "C"
     /**
      * @brief Pair of custom memory allocation callbacks for the VM.
      *
-     * Pass a pointer to this struct in `basic26_CreateVmOptions.alloc` to
-     * override the default allocator. Both `alloc` and `free` must be non-NULL
-     * if the struct is provided.
+     * Pass a pointer to this struct as the `allocator` argument of
+     * `basic26_Vm_create()` to override the default allocator. Both `alloc`
+     * and `free` must be non-NULL if the struct is provided.
      */
     typedef struct basic26_AllocCallbacks
     {
@@ -452,29 +452,13 @@ extern "C"
     } basic26_AllocCallbacks;
 
     /**
-     * @brief Options for creating a VM instance.
-     *
-     * Initialize with `basic26_CreateVmOptions_zeroed()` to get default values,
-     * then override fields as needed.
-     */
-    typedef struct basic26_CreateVmOptions
-    {
-        const basic26_AllocCallbacks *BASIC26_NULLABLE alloc; /**< [in] Custom allocator. NULL for default (or debug) allocator. */
-    } basic26_CreateVmOptions;
-
-    /**
-     * @brief Returns a zeroed CreateVmOptions struct with default values.
-     */
-    BASIC26_API basic26_CreateVmOptions BASIC26_API_CALL basic26_CreateVmOptions_zeroed(void);
-
-    /**
      * @brief Creates a new Virtual Machine instance.
      *
-     * @param [in]  options  Creation options.
-     * @param [out] out      Receives the VM handle.
+     * @param [in]  allocator Custom allocator. NULL for default allocator.
+     * @param [out] out       Receives the VM handle.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Vm_create(const basic26_CreateVmOptions *BASIC26_NONNULL options, basic26_Vm * BASIC26_NULLABLE * BASIC26_NONNULL out);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Vm_create(const basic26_AllocCallbacks *BASIC26_NULLABLE allocator, basic26_Vm * BASIC26_NULLABLE * BASIC26_NONNULL out);
 
     /**
      * @brief Destroys a Virtual Machine instance.
@@ -685,7 +669,7 @@ extern "C"
 
     /**
      * @brief Executes a script.
-     * 
+     *
      * @warning Passing a script with an invalid opcode is UB.
      *
      * @param [in] vm          The VM instance.
@@ -697,34 +681,20 @@ extern "C"
     BASIC26_API basic26_Result BASIC26_API_CALL basic26_Vm_run(basic26_Vm *BASIC26_NONNULL vm, const basic26_RunOptions *BASIC26_NONNULL options, basic26_RuntimeErrorInfo *BASIC26_NONNULL error_out);
 
     /**
-     * @brief Options for creating an execution state.
-     */
-    typedef struct basic26_CreateStateOptions
-    {
-        basic26_Vm *BASIC26_NONNULL vm; /**< [in] The VM instance. */
-    } basic26_CreateStateOptions;
-
-    /**
-     * @brief Returns a zeroed CreateStateOptions struct with default values.
-     */
-    BASIC26_API basic26_CreateStateOptions BASIC26_API_CALL basic26_CreateStateOptions_zeroed(void);
-
-    /**
      * @brief Creates a new execution state.
      *
-     * @param [in]  options  Creation options.
-     * @param [out] out      Receives the state handle.
+     * @param [in]  vm  The VM instance.
+     * @param [out] out Receives the state handle.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_State_create(const basic26_CreateStateOptions *BASIC26_NONNULL options, basic26_State * BASIC26_NULLABLE * BASIC26_NONNULL out);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_State_create(basic26_Vm *BASIC26_NONNULL vm, basic26_State * BASIC26_NULLABLE * BASIC26_NONNULL out);
 
     /**
      * @brief Destroys an execution state.
      *
      * @param [in] state  The state to destroy. May be NULL (no-op).
-     * @param [in] vm     The VM instance.
      */
-    BASIC26_API void BASIC26_API_CALL basic26_State_destroy(basic26_State *BASIC26_NULLABLE state, basic26_Vm *BASIC26_NONNULL vm);
+    BASIC26_API void BASIC26_API_CALL basic26_State_destroy(basic26_State *BASIC26_NULLABLE state);
 
     /**
      * @brief Options for clearing execution state.
@@ -856,9 +826,8 @@ extern "C"
      * @brief Destroys a compiled script.
      *
      * @param [in] script  The script to destroy. May be NULL (no-op).
-     * @param [in] vm      The VM instance.
      */
-    BASIC26_API void BASIC26_API_CALL basic26_Script_destroy(basic26_Script *BASIC26_NULLABLE script, basic26_Vm *BASIC26_NONNULL vm);
+    BASIC26_API void BASIC26_API_CALL basic26_Script_destroy(basic26_Script *BASIC26_NULLABLE script);
 
     /**
      * @brief Options for clearing script resources.
@@ -954,7 +923,6 @@ extern "C"
      */
     typedef struct basic26_CompileOptions
     {
-        basic26_Vm *BASIC26_NONNULL vm;                     /**< [in] The VM instance. */
         const uint8_t *BASIC26_NONNULL source;              /**< [in] Source code string. */
         size_t source_len;                                  /**< [in] Length of source code in bytes. */
         const basic26_ScriptLimits *BASIC26_NONNULL limits; /**< [in] Compilation limits. */
@@ -1100,11 +1068,10 @@ extern "C"
      * This allows the host to extend a script with additional instructions.
      *
      * @param [in] script  The script instance.
-     * @param [in] vm      The VM instance (used for memory allocation).
      * @param [in] op      The instruction to append.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_push_op(basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, basic26_Op op);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_push_op(basic26_Script *BASIC26_NONNULL script, basic26_Op op);
 
     /**
      * @brief Inserts a bytecode instruction at a specific position in a compiled script.
@@ -1117,14 +1084,13 @@ extern "C"
      *          will become invalid and must be updated manually.
      *
      * @param [in] script  The script instance.
-     * @param [in] vm      The VM instance (used for memory allocation).
      * @param [in] pos     Zero-based index where the instruction will be inserted.
      *                     Can be equal to the current instruction count to append.
      * @param [in] op      The instruction to insert.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if pos is out of range,
      *         BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_insert_op(basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, size_t pos, basic26_Op op);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_insert_op(basic26_Script *BASIC26_NONNULL script, size_t pos, basic26_Op op);
 
     /**
      * @brief Removes the last bytecode instruction from a compiled script.
@@ -1175,19 +1141,18 @@ extern "C"
     BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_get_label(const basic26_Script *BASIC26_NONNULL script, const uint8_t *BASIC26_NONNULL name, size_t name_len, size_t *BASIC26_NONNULL out);
 
     /**
-     * @brief Sets the instruction pointer (IP) for a label.
+     * @brief Sets the instruction pointer for a label, creating it if it doesn't exist.
      *
-     * If a label with the same name already exists, its IP is updated. Otherwise,
+     * If a label with the given name already exists, its IP is updated. Otherwise,
      * a new label is created.
      *
      * @param [in] script    The script instance.
-     * @param [in] vm        The VM instance (used for memory allocation).
      * @param [in] name      Pointer to the label name string.
      * @param [in] name_len  Length of the label name in bytes.
      * @param [in] ip        The instruction pointer associated with the label.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_set_label(basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, const uint8_t *BASIC26_NONNULL name, size_t name_len, size_t ip);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_set_label(basic26_Script *BASIC26_NONNULL script, const uint8_t *BASIC26_NONNULL name, size_t name_len, size_t ip);
 
     /**
      * @brief Removes a label by its name.
@@ -1211,12 +1176,11 @@ extern "C"
      * @brief Dumps the script bytecode to a human-readable string.
      *
      * @param [in]  script   The script instance.
-     * @param [in]  vm       The VM instance.
-     * @param [out] out      Receives a pointer to the allocated string. The data shoule be freed using `basic26_Vm_free`.
+     * @param [out] out      Receives a pointer to the allocated string. The data should be freed using `basic26_Vm_free`.
      * @param [out] out_len  Receives the length of the string in bytes.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_dump(const basic26_Script *BASIC26_NONNULL script, basic26_Vm *BASIC26_NONNULL vm, uint8_t *BASIC26_NONNULL *BASIC26_NONNULL out, size_t *BASIC26_NONNULL out_len);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_Script_dump(const basic26_Script *BASIC26_NONNULL script, uint8_t *BASIC26_NONNULL *BASIC26_NONNULL out, size_t *BASIC26_NONNULL out_len);
 
     /**
      * @brief Creates a new debug info instance.
@@ -1231,9 +1195,8 @@ extern "C"
      * @brief Destroys a debug info instance.
      *
      * @param [in] debug_info The debug info instance to destroy. May be NULL (no-op).
-     * @param [in] vm         The VM instance.
      */
-    BASIC26_API void BASIC26_API_CALL basic26_DebugInfo_destroy(basic26_DebugInfo *BASIC26_NULLABLE debug_info, basic26_Vm *BASIC26_NONNULL vm);
+    BASIC26_API void BASIC26_API_CALL basic26_DebugInfo_destroy(basic26_DebugInfo *BASIC26_NULLABLE debug_info);
 
     /**
      * @brief Clears debug info resources.
@@ -1267,24 +1230,22 @@ extern "C"
     /**
      * @brief Appends a source code position to the end of the source map.
      *
-     * @param [in] debug_info The script instance.
-     * @param [in] vm         The VM instance (used for memory allocation).
+     * @param [in] debug_info The debug info instance.
      * @param [in] pos        Byte offset in the source code.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_push_source_pos(basic26_DebugInfo *BASIC26_NONNULL debug_info, basic26_Vm *BASIC26_NONNULL vm, size_t pos);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_push_source_pos(basic26_DebugInfo *BASIC26_NONNULL debug_info, size_t pos);
 
     /**
      * @brief Inserts a source code position at a specific index.
      *
      * @param [in] debug_info The debug info instance.
-     * @param [in] vm         The VM instance (used for memory allocation).
      * @param [in] ip         Zero-based index where the position will be inserted.
      * @param [in] pos        Byte offset in the source code.
      * @return BASIC26_RESULT_OK on success, BASIC26_RESULT_NOT_FOUND if ip is out of range,
      *         BASIC26_RESULT_OUT_OF_MEMORY if allocation fails.
      */
-    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_insert_source_pos(basic26_DebugInfo *BASIC26_NONNULL debug_info, basic26_Vm *BASIC26_NONNULL vm, size_t ip, size_t pos);
+    BASIC26_API basic26_Result BASIC26_API_CALL basic26_DebugInfo_insert_source_pos(basic26_DebugInfo *BASIC26_NONNULL debug_info, size_t ip, size_t pos);
 
     /**
      * @brief Removes the last source code position.
