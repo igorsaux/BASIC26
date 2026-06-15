@@ -961,8 +961,6 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
                 0;
 
             while (state.ip < script.ops.items.len) {
-                @prefetch(script.ops.items, .{});
-
                 if (comptime check_ops_limit) {
                     if (limits.max_ops > 0 and ops_executed >= limits.max_ops) {
                         return c.BASIC26_RESULT_OUT_OF_LIMITS;
