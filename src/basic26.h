@@ -136,15 +136,15 @@
  *
  * The VM provides two categories of execution limits via `basic26_RunLimits`:
  * - `max_ops`: caps the number of bytecode instructions executed (0 = unlimited).
- * - `max_time_ns`: caps wall-clock execution time in nanoseconds (0 = unlimited).
+ * - `max_time_ns`: caps execution time in nanoseconds (0 = unlimited).
  *
  * When a limit is exceeded, `basic26_Vm_run()` returns `BASIC26_RESULT_OUT_OF_LIMITS`. This
  * allows the host to prevent runaway or malicious scripts from consuming unbounded resources.
  *
- * Additionally, a native function callback can return `BASIC26_FUNCTION_RESULT_YIELD` to
- * suspend execution. The host can later resume by calling `basic26_Vm_run()` again; execution
- * picks up at the next instruction. This is useful for implementing asynchronous operations
- * (e.g. waiting for I/O) in an event-driven host.
+ * On freestanding targets, time measurement requires a `basic26_TimerCallback` to be
+ * provided via `basic26_RunOptions.timer`. If no callback is provided and `max_time_ns` is
+ * set, `basic26_Vm_run()` returns `BASIC26_RESULT_OUT_OF_LIMITS` immediately. On hosted
+ * platforms, the default system clock is used when no callback is provided.
  *
  * @warning Thread Safety
  * The BASIC26 API is **NOT thread-safe**. There are no internal synchronization or locking
@@ -408,7 +408,7 @@ extern "C"
      * @param [in] argv    Array of argument values. May be NULL if argc is 0.
      * @return Execution status: OK to continue, ERROR to abort, YIELD to suspend.
      */
-    typedef basic26_FunctionResult(BASIC26_API_CALL *basic26_function_callback)(const basic26_CallInfo *BASIC26_NONNULL info, size_t argc, const basic26_Value *BASIC26_NULLABLE argv);
+    typedef basic26_FunctionResult(BASIC26_API_CALL *basic26_FunctionCallback)(const basic26_CallInfo *BASIC26_NONNULL info, size_t argc, const basic26_Value *BASIC26_NULLABLE argv);
 
     /**
      * @brief Custom memory allocation callback.
@@ -565,8 +565,8 @@ extern "C"
      */
     typedef struct basic26_RegisterFunctionOptions
     {
-        basic26_SymbolId name;                              /**< [in] The symbol ID representing the function name. */
-        basic26_function_callback BASIC26_NONNULL callback; /**< [in] Callback function. */
+        basic26_SymbolId name;                             /**< [in] The symbol ID representing the function name. */
+        basic26_FunctionCallback BASIC26_NONNULL callback; /**< [in] Callback function. */
     } basic26_RegisterFunctionOptions;
 
     /**
@@ -598,11 +598,17 @@ extern "C"
      * enforce a cap on resource consumption during `basic26_Vm_run()`. If any
      * limit is exceeded, the run returns `BASIC26_RESULT_OUT_OF_LIMITS`.
      *
-     * When `max_time_ns` is set, the VM checks elapsed wall-clock time every
+     * When `max_time_ns` is set, the VM checks elapsed time every
      * `time_check_interval` opcodes rather than on every single opcode, reducing
      * the overhead of frequent system clock queries. Time is always checked
      * immediately after a CALL opcode completes, regardless of the interval, so
      * that long-running native callbacks cannot bypass the time limit.
+     *
+     * On hosted platforms, the default system wall-clock is used for time
+     * measurement. On freestanding targets, a `basic26_TimerCallback` must be
+     * provided via `basic26_RunOptions.timer`; if no callback is provided and
+     * `max_time_ns` is set, `basic26_Vm_run()` returns
+     * `BASIC26_RESULT_OUT_OF_LIMITS` immediately.
      */
     typedef struct basic26_RunLimits
     {
@@ -647,6 +653,43 @@ extern "C"
     } basic26_RuntimeErrorInfo;
 
     /**
+     * @brief Context information passed to the timer callback.
+     *
+     * When the VM calls a timer callback, it fills in this struct so the
+     * callback can access the VM, State, Script, and any userdata that was
+     * passed to `basic26_Vm_run()`. This enables the callback to implement
+     * custom time sources on platforms where standard wall-clock time is
+     * not available (e.g. freestanding / embedded targets).
+     */
+    typedef struct basic26_TimerInfo
+    {
+        basic26_Vm *BASIC26_NONNULL vm;               /**< [in] The VM instance. */
+        basic26_State *BASIC26_NONNULL state;         /**< [in] The current execution state. */
+        const basic26_Script *BASIC26_NONNULL script; /**< [in] The script being executed. */
+        void *BASIC26_NULLABLE userdata;              /**< [in] User-provided context. */
+    } basic26_TimerInfo;
+
+    /**
+     * @brief Callback signature for a custom timer source.
+     *
+     * When `max_time_ns` is set in `basic26_RunLimits`, the VM needs a way
+     * to measure elapsed time. On hosted platforms (with an OS), a default
+     * system clock is used if no callback is provided. On freestanding
+     * targets (no OS), the host MUST provide a timer callback; otherwise,
+     * `basic26_Vm_run()` will immediately return
+     * `BASIC26_RESULT_OUT_OF_LIMITS` when a time limit is requested.
+     *
+     * The callback should return a monotonically non-decreasing value
+     * representing the current time in nanoseconds. The VM computes elapsed
+     * time by subtracting the value returned at the start of the run from
+     * subsequent values.
+     *
+     * @param [in] info Context information (VM, State, Script, userdata).
+     * @return Current time value in nanoseconds.
+     */
+    typedef uint64_t(BASIC26_API_CALL *basic26_TimerCallback)(const basic26_TimerInfo *BASIC26_NONNULL info);
+
+    /**
      * @brief Returns a zeroed RuntimeErrorInfo struct with default values.
      */
     BASIC26_API basic26_RuntimeErrorInfo BASIC26_API_CALL basic26_RuntimeErrorInfo_zeroed(void);
@@ -660,6 +703,7 @@ extern "C"
         const basic26_Script *BASIC26_NONNULL script;    /**< [in] Script to run. */
         const basic26_RunLimits *BASIC26_NONNULL limits; /**< [in] Execution limits. */
         void *BASIC26_NULLABLE userdata;                 /**< [in] User context passed to callbacks. */
+        basic26_TimerCallback BASIC26_NULLABLE timer;    /**< [in] The timer callback. */
     } basic26_RunOptions;
 
     /**

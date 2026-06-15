@@ -2,16 +2,16 @@
 
 A lightweight, embeddable scripting language and virtual machine.
 
-BASIC26 exposes a C API so that host applications can compile and execute simple scripts at runtime. The language is line-oriented, inspired by classic BASIC, and is designed for use cases such as game modding, configuration logic, automation rules, and any scenario where a small, safe, sandboxed scripting layer is desirable.
+BASIC26 exposes a C API so that host applications can compile and execute any scripts at runtime. The builtin language is line-oriented, inspired by classic BASIC, and is designed for use cases such as game modding, configuration logic, automation rules, and any scenario where a small, safe, sandboxed scripting layer is desirable.
 
 ## Features
 
 - **Mechanisms, Not Policies** - the VM exposes only raw primitives without built-in data structures, high-level semantics or implicit behaviour.
 - **Embeddable C API** - compile scripts and execute them from any C-compatible host application.
-- **Sandboxed execution** - configurable limits on opcode count and wall-clock time prevent runaway scripts.
+- **Sandboxed execution** - configurable limits on opcode count and execution time prevent runaway scripts.
 - **Yield/resume** - native callbacks can suspend execution (`BASIC26_FUNCTION_RESULT_YIELD`) and the host can resume later, enabling async patterns in event-driven applications.
 - **No external dependencies** - the library is self-contained and links only against libc for the examples.
-- **Bare-metal ready** — fully deterministic with zero OS assumptions or system API calls. Porting to any environment is trivial, even the default allocator is optional and overridable.
+- **Bare-metal ready** — fully deterministic with zero OS assumptions or system API calls. Porting to any environment is trivial; even the default allocator and time source are optional and overridable.
 
 ## Language Reference
 

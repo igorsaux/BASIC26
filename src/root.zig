@@ -121,8 +121,10 @@ const UserAllocator = struct {
 
 const Allocator = union(enum) {
     default,
-    debug: std.heap.DebugAllocator(.{}),
-    failing,
+    debug: if (builtin.os.tag == .freestanding)
+        void
+    else
+        std.heap.DebugAllocator(.{}),
     user: UserAllocator,
 
     pub inline fn allocator(this: *Allocator) std.mem.Allocator {
@@ -131,9 +133,14 @@ const Allocator = union(enum) {
         }
 
         return switch (this.*) {
-            .default => std.heap.smp_allocator,
-            .debug => this.debug.allocator(),
-            .failing => std.mem.Allocator.failing,
+            .default => if (builtin.os.tag == .freestanding)
+                std.mem.Allocator.failing
+            else
+                std.heap.smp_allocator,
+            .debug => if (builtin.os.tag == .freestanding)
+                unreachable
+            else
+                this.debug.allocator(),
             .user => this.user.allocator(),
         };
     }
@@ -143,11 +150,10 @@ const Allocator = union(enum) {
     }
 
     pub inline fn fromDebug() Allocator {
-        return .{ .debug = .init };
-    }
-
-    pub inline fn fromFailing() Allocator {
-        return .failing;
+        return if (comptime builtin.os.tag == .freestanding)
+            @compileError("Not available")
+        else
+            .{ .debug = .init };
     }
 
     pub inline fn fromUser(userdata: ?*anyopaque, alloc_callback: c.basic26_alloc, free_callback: c.basic26_free) Allocator {
@@ -243,9 +249,8 @@ const Strings = struct {
 
 const Vm = struct {
     allocator: Allocator,
-    io: *std.Io.Threaded = .global_single_threaded,
     strings: Strings = .init(),
-    function_callbacks: std.AutoHashMapUnmanaged(c.basic26_SymbolId, c.basic26_function_callback) = .empty,
+    function_callbacks: std.AutoHashMapUnmanaged(c.basic26_SymbolId, c.basic26_FunctionCallback) = .empty,
 
     pub inline fn init(allocator: Allocator) Vm {
         return .{ .allocator = allocator };
@@ -765,9 +770,7 @@ export fn basic26_Vm_create(
     std.debug.assert(out != null);
 
     var allocator = if (c_allocator == null)
-        if (builtin.os.tag == .freestanding)
-            Allocator.fromFailing()
-        else if (builtin.mode == .Debug)
+        if (comptime builtin.mode == .Debug and builtin.os.tag != .freestanding)
             Allocator.fromDebug()
         else
             Allocator.fromDefault()
@@ -935,22 +938,64 @@ export fn basic26_RunOptions_zeroed() callconv(.c) c.basic26_RunOptions {
     return .{};
 }
 
+fn defaultTimer(info: *const c.basic26_TimerInfo) callconv(.c) u64 {
+    _ = info;
+
+    const now = std.Io.Timestamp.now(std.Io.Threaded.global_single_threaded.io(), .real);
+
+    return @truncate(@as(u96, @bitCast(now.nanoseconds)));
+}
+
 fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type {
     return struct {
         fn run(
             vm: *Vm,
-            state: *State,
-            script: *const Script,
-            limits: *const c.basic26_RunLimits,
-            userdata: ?*anyopaque,
+            options: *const c.basic26_RunOptions,
             error_out: *c.basic26_RuntimeErrorInfo,
         ) c.basic26_Result {
+            std.debug.assert(options.script != null);
+            std.debug.assert(options.state != null);
+            std.debug.assert(options.limits != null);
+
+            const script: *const Script = @ptrCast(@alignCast(options.script.?));
+            const state: *State = @ptrCast(@alignCast(options.state.?));
+            const limits: *const c.basic26_RunLimits = @ptrCast(@alignCast(options.limits));
+
             if (state.ip >= script.ops.items.len) {
                 return c.BASIC26_RESULT_OK;
             }
 
-            const start_time: std.Io.Timestamp = if (comptime check_time_limit)
-                std.Io.Timestamp.now(vm.io.io(), .real)
+            if (comptime check_time_limit and builtin.os.tag == .freestanding) {
+                if (options.timer == null) {
+                    return c.BASIC26_RESULT_OUT_OF_LIMITS;
+                }
+            }
+
+            const timer_info: c.basic26_TimerInfo = if (comptime check_time_limit)
+                .{
+                    .vm = @ptrCast(vm),
+                    .state = options.state,
+                    .script = options.script,
+                    .userdata = options.userdata,
+                }
+            else
+                undefined;
+
+            const timer_fn = blk: {
+                if (comptime !check_time_limit) {
+                    break :blk void;
+                }
+
+                break :blk if (comptime builtin.os.tag == .freestanding)
+                    options.timer.?
+                else if (options.timer == null)
+                    defaultTimer
+                else
+                    options.timer.?;
+            };
+
+            const start_time_ns: u64 = if (comptime check_time_limit)
+                timer_fn(&timer_info)
             else
                 undefined;
 
@@ -958,7 +1003,7 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
             var ops_since_time_check: usize = if (comptime check_time_limit)
                 limits.time_check_interval
             else
-                0;
+                undefined;
 
             while (state.ip < script.ops.items.len) {
                 if (comptime check_ops_limit) {
@@ -971,8 +1016,8 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
                     const interval = limits.time_check_interval;
 
                     if (interval == 0 or ops_since_time_check >= interval) {
-                        const current_time = std.Io.Timestamp.now(vm.io.io(), .real);
-                        const elapsed = current_time.nanoseconds - start_time.nanoseconds;
+                        const current_time_ns: u64 = timer_fn(&timer_info);
+                        const elapsed = current_time_ns - start_time_ns;
 
                         if (elapsed >= limits.max_time_ns) {
                             return c.BASIC26_RESULT_OUT_OF_LIMITS;
@@ -994,7 +1039,7 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
 
                 const is_call_op = op.code == c.BASIC26_OPCODE_CALL;
 
-                switch (vm.execute(state, script, userdata, op)) {
+                switch (vm.execute(state, script, options.userdata, op)) {
                     .ok => {},
                     .yield => return c.BASIC26_RESULT_YIELDED,
                     .err => |err| {
@@ -1020,8 +1065,8 @@ fn RunLoop(comptime check_ops_limit: bool, comptime check_time_limit: bool) type
                 // cannot bypass the time limit.
                 if (comptime check_time_limit) {
                     if (is_call_op) {
-                        const current_time = std.Io.Timestamp.now(vm.io.io(), .real);
-                        const elapsed = current_time.nanoseconds - start_time.nanoseconds;
+                        const current_time_ns = timer_fn(&timer_info);
+                        const elapsed = current_time_ns - start_time_ns;
 
                         if (elapsed >= limits.max_time_ns) {
                             return c.BASIC26_RESULT_OUT_OF_LIMITS;
@@ -1048,21 +1093,19 @@ export fn basic26_Vm_run(
     std.debug.assert(error_out != null);
 
     const vm: *Vm = @ptrCast(@alignCast(c_vm.?));
-    const state: *State = @ptrCast(@alignCast(options.?.state.?));
-    const script: *const Script = @ptrCast(@alignCast(options.?.script.?));
     const limits: *const c.basic26_RunLimits = @ptrCast(@alignCast(options.?.limits));
 
     const check_ops = limits.max_ops > 0;
     const check_time = limits.max_time_ns > 0;
 
     if (check_ops and check_time) {
-        return RunLoop(true, true).run(vm, state, script, limits, options.?.userdata, error_out.?);
+        return RunLoop(true, true).run(vm, options.?, error_out.?);
     } else if (check_ops) {
-        return RunLoop(true, false).run(vm, state, script, limits, options.?.userdata, error_out.?);
+        return RunLoop(true, false).run(vm, options.?, error_out.?);
     } else if (check_time) {
-        return RunLoop(false, true).run(vm, state, script, limits, options.?.userdata, error_out.?);
+        return RunLoop(false, true).run(vm, options.?, error_out.?);
     } else {
-        return RunLoop(false, false).run(vm, state, script, limits, options.?.userdata, error_out.?);
+        return RunLoop(false, false).run(vm, options.?, error_out.?);
     }
 }
 
@@ -4216,6 +4259,50 @@ test "Get OP pos" {
     try expectEnum(c.BASIC26_RESULT_OK, basic26_DebugInfo_get_source_pos(c_debug_info.?, run_error.ip, &pos));
 
     try std.testing.expectEqual(12, pos);
+}
+
+test "Timeout" {
+    var c_vm: ?*c.basic26_Vm = null;
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Vm_create(&.{ .alloc = null }, &c_vm));
+    defer basic26_Vm_destroy(c_vm.?);
+
+    var c_state: ?*c.basic26_State = null;
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_State_create(c_vm.?, &c_state));
+    defer basic26_State_destroy(c_state.?);
+
+    var c_script: ?*c.basic26_Script = null;
+    try expectEnum(c.BASIC26_RESULT_OK, basic26_Script_create(c_vm.?, &c_script));
+    defer basic26_Script_destroy(c_script.?);
+
+    var compile_error: c.basic26_CompileErrorInfo = .{};
+
+    const SOURCE =
+        \\WHILE 1
+        \\ENDWHILE
+    ;
+
+    try expectEnum(
+        c.BASIC26_RESULT_OK,
+        basic26_Script_compile(c_script.?, &.{
+            .source = SOURCE.ptr,
+            .source_len = SOURCE.len,
+            .limits = &.{},
+        }, &compile_error),
+    );
+
+    var run_error: c.basic26_RuntimeErrorInfo = .{};
+    try expectEnum(
+        c.BASIC26_RESULT_OUT_OF_LIMITS,
+        basic26_Vm_run(c_vm.?, &.{
+            .state = c_state.?,
+            .script = c_script.?,
+            .limits = &.{
+                .max_time_ns = 1e+6,
+                .time_check_interval = 10000,
+            },
+            .userdata = null,
+        }, &run_error),
+    );
 }
 
 // Seems fuzzing works only on Linux for now.

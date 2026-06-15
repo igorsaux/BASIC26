@@ -9,7 +9,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const stack_size = b.option(usize, "stack_size", "This constant controls the size of the inline stack array inside every basic26_State");
+    const stack_size = b.option(
+        usize,
+        "stack_size",
+        "This constant controls the size of the inline stack array inside every basic26_State",
+    );
+    const examples = b.option(bool, "examples", "Build examples") orelse (target.result.os.tag != .freestanding);
 
     const translate_c = b.dependency("translate_c", .{});
     const t: Translator = .init(translate_c, .{
@@ -42,13 +47,17 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(basic26_static_lib);
 
-    const basic26_dynamic_lib = b.addLibrary(.{
-        .name = "basic26",
-        .root_module = basic26_mod,
-        .linkage = .dynamic,
-    });
+    var basic26_dynamic_lib: *std.Build.Step.Compile = undefined;
 
-    b.installArtifact(basic26_dynamic_lib);
+    if (target.result.os.tag != .freestanding) {
+        basic26_dynamic_lib = b.addLibrary(.{
+            .name = "basic26",
+            .root_module = basic26_mod,
+            .linkage = .dynamic,
+        });
+
+        b.installArtifact(basic26_dynamic_lib);
+    }
 
     const install_header_file = b.addInstallHeaderFile(b.path("src/basic26.h"), "basic26.h");
     b.getInstallStep().dependOn(&install_header_file.step);
@@ -62,41 +71,43 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
 
-    const example_01 = b.addExecutable(.{
-        .name = "example_01",
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-        }),
-    });
+    if (examples) {
+        const example_01 = b.addExecutable(.{
+            .name = "example_01",
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
+        });
 
-    example_01.root_module.addCSourceFile(.{
-        .file = b.path("examples/01.c"),
-        .language = .c,
-    });
-    example_01.root_module.addCMacro("BASIC26_DYNAMIC", "1");
-    example_01.root_module.addIncludePath(b.path("src/"));
-    example_01.root_module.linkLibrary(basic26_dynamic_lib);
+        example_01.root_module.addCSourceFile(.{
+            .file = b.path("examples/01.c"),
+            .language = .c,
+        });
+        example_01.root_module.addCMacro("BASIC26_DYNAMIC", "1");
+        example_01.root_module.addIncludePath(b.path("src/"));
+        example_01.root_module.linkLibrary(basic26_dynamic_lib);
 
-    b.installArtifact(example_01);
+        b.installArtifact(example_01);
 
-    const example_02 = b.addExecutable(.{
-        .name = "example_02",
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-        }),
-    });
+        const example_02 = b.addExecutable(.{
+            .name = "example_02",
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
+        });
 
-    example_02.root_module.addCSourceFile(.{
-        .file = b.path("examples/02.c"),
-        .language = .c,
-    });
-    example_02.root_module.addCMacro("BASIC26_STATIC", "1");
-    example_02.root_module.addIncludePath(b.path("src/"));
-    example_02.root_module.linkLibrary(basic26_static_lib);
+        example_02.root_module.addCSourceFile(.{
+            .file = b.path("examples/02.c"),
+            .language = .c,
+        });
+        example_02.root_module.addCMacro("BASIC26_STATIC", "1");
+        example_02.root_module.addIncludePath(b.path("src/"));
+        example_02.root_module.linkLibrary(basic26_static_lib);
 
-    b.installArtifact(example_02);
+        b.installArtifact(example_02);
+    }
 }
