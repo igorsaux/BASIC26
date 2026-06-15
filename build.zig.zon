@@ -1,6 +1,6 @@
 .{
     .name = .basic26,
-    .version = "0.0.0",
+    .version = "1.0.0",
     .fingerprint = 0xd2eac84aef054c5c,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
@@ -13,8 +13,6 @@
         "build.zig",
         "build.zig.zon",
         "src",
-        // For example...
-        //"LICENSE",
-        //"README.md",
+        "README.md",
     },
 }
