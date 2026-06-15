@@ -2452,6 +2452,7 @@ export fn basic26_CompileOptions_zeroed() callconv(.c) c.basic26_CompileOptions 
     return .{};
 }
 
+// TODO: Rewrite this cringe. Completely.
 export fn basic26_Script_compile(
     c_script: ?*c.basic26_Script,
     options: ?*const c.basic26_CompileOptions,
