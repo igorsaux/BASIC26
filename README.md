@@ -94,7 +94,7 @@ Demonstrates the full API lifecycle: creating a VM, compiling a script, register
 
 Computes Fibonacci numbers using a WHILE loop. Shows how to set variables from C before execution, read them back after, reset state for repeated runs, and measure performance with execution timing. Demonstrates the WHILE/ENDWHILE control flow construct and the State reset/clear API. This example links against the static library.
 
-## Benchmarks
+#### Results
 
 MacBook Air M3:
 
@@ -160,4 +160,172 @@ Max:      14300 ns
 Std Dev:  206.5 ns (12.3%)
 P95:      1800 ns
 P99:      1800 ns
+```
+
+### Example 03 - Native Call Overhead Benchmark (`examples/03.c`)
+
+Measures the cost of a single native call (script bytecode -> C callback -> back) by comparing a pure-bytecode inner loop (`temp = a + b`) against a native-call variant (`NADD a, b, $temp`), and additionally measures a no-op native call (`NOOP a`) to isolate the call-frame overhead from the callback body. Reports per-iteration stats (mean / median / min / max / std dev / p95 / p99), derived per-call overhead, and native-call throughput in calls/sec. Links against the static library.
+
+#### Results
+
+MacBook Air M3:
+
+```
+--- Per-variant results (loop body x 100) ---
+  bytecode   Run  1: 2334 ns/iter
+  bytecode   Run  2: 2355 ns/iter
+  bytecode   Run  3: 2349 ns/iter
+  bytecode   Run  4: 2350 ns/iter
+  bytecode   Run  5: 2394 ns/iter
+  bytecode   Run  6: 2377 ns/iter
+  bytecode   Run  7: 2381 ns/iter
+  bytecode   Run  8: 2402 ns/iter
+  bytecode   Run  9: 2353 ns/iter
+  bytecode   Run 10: 2339 ns/iter
+--- bytecode (ns/iter) ---
+Mean:     2363 ns
+Median:   2355 ns
+Min:      2334 ns
+Max:      2402 ns
+Std Dev:  22.2 ns (0.9%)
+P95:      2402 ns
+P99:      2402 ns
+
+  native     Run  1: 3014 ns/iter
+  native     Run  2: 2974 ns/iter
+  native     Run  3: 2976 ns/iter
+  native     Run  4: 2984 ns/iter
+  native     Run  5: 2982 ns/iter
+  native     Run  6: 2982 ns/iter
+  native     Run  7: 2971 ns/iter
+  native     Run  8: 2981 ns/iter
+  native     Run  9: 2994 ns/iter
+  native     Run 10: 3016 ns/iter
+--- native (ns/iter) ---
+Mean:     2987 ns
+Median:   2982 ns
+Min:      2971 ns
+Max:      3016 ns
+Std Dev:  15.1 ns (0.5%)
+P95:      3016 ns
+P99:      3016 ns
+
+  noop       Run  1: 2379 ns/iter
+  noop       Run  2: 2375 ns/iter
+  noop       Run  3: 2366 ns/iter
+  noop       Run  4: 2371 ns/iter
+  noop       Run  5: 2362 ns/iter
+  noop       Run  6: 2377 ns/iter
+  noop       Run  7: 2370 ns/iter
+  noop       Run  8: 2371 ns/iter
+  noop       Run  9: 2365 ns/iter
+  noop       Run 10: 2367 ns/iter
+--- noop (ns/iter) ---
+Mean:     2371 ns
+Median:   2371 ns
+Min:      2362 ns
+Max:      2379 ns
+Std Dev:  5.1 ns (0.2%)
+P95:      2379 ns
+P99:      2379 ns
+
+--- native (per-iter, last run) (ns/iter) ---
+Mean:     2974 ns
+Median:   2959 ns
+Min:      2708 ns
+Max:      44542 ns
+Std Dev:  232.8 ns (7.8%)
+P95:      3042 ns
+P99:      3292 ns
+
+--- Derived native-call metrics ---
+bytecode baseline : 2373 ns/script-run  (23.73 ns/loop-iter)
+native (NADD)     : 2981 ns/script-run  (29.81 ns/loop-iter)
+noop (NOOP)       : 2370 ns/script-run  (23.70 ns/loop-iter)
+
+Marginal cost per native call (native - bytecode) / N : +6.1 ns
+Absolute cost per empty native call (noop / N)        : 23.7 ns
+Empty native call throughput                          : 42189160 calls/sec
+NADD native call throughput (incl. callback body)     : 33549781 calls/sec
+```
+
+Intel Core i5-11600K:
+
+```
+--- Per-variant results (loop body x 100) ---
+  bytecode   Run  1: 3585 ns/iter
+  bytecode   Run  2: 3606 ns/iter
+  bytecode   Run  3: 3619 ns/iter
+  bytecode   Run  4: 3624 ns/iter
+  bytecode   Run  5: 3624 ns/iter
+  bytecode   Run  6: 3624 ns/iter
+  bytecode   Run  7: 3602 ns/iter
+  bytecode   Run  8: 3603 ns/iter
+  bytecode   Run  9: 3615 ns/iter
+  bytecode   Run 10: 3609 ns/iter
+--- bytecode (ns/iter) ---
+Mean:     3611 ns
+Median:   3615 ns
+Min:      3585 ns
+Max:      3624 ns
+Std Dev:  11.9 ns (0.3%)
+P95:      3624 ns
+P99:      3624 ns
+
+  native     Run  1: 3842 ns/iter
+  native     Run  2: 3816 ns/iter
+  native     Run  3: 3839 ns/iter
+  native     Run  4: 3786 ns/iter
+  native     Run  5: 3787 ns/iter
+  native     Run  6: 3814 ns/iter
+  native     Run  7: 3801 ns/iter
+  native     Run  8: 3774 ns/iter
+  native     Run  9: 3785 ns/iter
+  native     Run 10: 3827 ns/iter
+--- native (ns/iter) ---
+Mean:     3807 ns
+Median:   3814 ns
+Min:      3774 ns
+Max:      3842 ns
+Std Dev:  22.7 ns (0.6%)
+P95:      3842 ns
+P99:      3842 ns
+
+  noop       Run  1: 2930 ns/iter
+  noop       Run  2: 2939 ns/iter
+  noop       Run  3: 2958 ns/iter
+  noop       Run  4: 2912 ns/iter
+  noop       Run  5: 2928 ns/iter
+  noop       Run  6: 2946 ns/iter
+  noop       Run  7: 2942 ns/iter
+  noop       Run  8: 2940 ns/iter
+  noop       Run  9: 2936 ns/iter
+  noop       Run 10: 2947 ns/iter
+--- noop (ns/iter) ---
+Mean:     2938 ns
+Median:   2940 ns
+Min:      2912 ns
+Max:      2958 ns
+Std Dev:  11.6 ns (0.4%)
+P95:      2958 ns
+P99:      2958 ns
+
+--- native (per-iter, last run) (ns/iter) ---
+Mean:     3715 ns
+Median:   3600 ns
+Min:      3500 ns
+Max:      88900 ns
+Std Dev:  580.5 ns (15.6%)
+P95:      3900 ns
+P99:      5500 ns
+
+--- Derived native-call metrics ---
+bytecode baseline : 3612 ns/script-run  (36.12 ns/loop-iter)
+native (NADD)     : 3738 ns/script-run  (37.38 ns/loop-iter)
+noop (NOOP)       : 2965 ns/script-run  (29.65 ns/loop-iter)
+
+Marginal cost per native call (native - bytecode) / N : +1.3 ns
+Absolute cost per empty native call (noop / N)        : 29.7 ns
+Empty native call throughput                          : 33725482 calls/sec
+NADD native call throughput (incl. callback body)     : 26749039 calls/sec
 ```

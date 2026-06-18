@@ -109,5 +109,24 @@ pub fn build(b: *std.Build) void {
         example_02.root_module.linkLibrary(basic26_static_lib);
 
         b.installArtifact(example_02);
+
+        const example_03 = b.addExecutable(.{
+            .name = "example_03",
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
+        });
+
+        example_03.root_module.addCSourceFile(.{
+            .file = b.path("examples/03.c"),
+            .language = .c,
+        });
+        example_03.root_module.addCMacro("BASIC26_STATIC", "1");
+        example_03.root_module.addIncludePath(b.path("src/"));
+        example_03.root_module.linkLibrary(basic26_static_lib);
+
+        b.installArtifact(example_03);
     }
 }
