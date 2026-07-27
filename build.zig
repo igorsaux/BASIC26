@@ -128,5 +128,100 @@ pub fn build(b: *std.Build) void {
         example_03.root_module.linkLibrary(basic26_static_lib);
 
         b.installArtifact(example_03);
+
+        const example_conc = b.addExecutable(.{
+            .name = "example_conc",
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
+        });
+
+        example_conc.root_module.addCSourceFile(.{
+            .file = b.path("examples/conc.c"),
+            .language = .c,
+        });
+        example_conc.root_module.addCMacro("BASIC26_STATIC", "1");
+        example_conc.root_module.addIncludePath(b.path("src/"));
+        example_conc.root_module.linkLibrary(basic26_static_lib);
+        example_conc.root_module.linkSystemLibrary("pthread", .{});
+
+        b.installArtifact(example_conc);
+
+        const example_startup = b.addExecutable(.{
+            .name = "example_startup",
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
+        });
+
+        example_startup.root_module.addCSourceFile(.{
+            .file = b.path("examples/startup.c"),
+            .language = .c,
+        });
+        example_startup.root_module.addCMacro("BASIC26_STATIC", "1");
+        example_startup.root_module.addIncludePath(b.path("src/"));
+        example_startup.root_module.linkLibrary(basic26_static_lib);
+
+        b.installArtifact(example_startup);
+
+        if (target.result.os.tag == .macos) {
+            const wasm_target = b.resolveTargetQuery(.{
+                .cpu_arch = .wasm32,
+                .os_tag = .freestanding,
+            });
+
+            const is_prime = b.addExecutable(.{
+                .name = "is_prime",
+                .root_module = b.createModule(.{
+                    .root_source_file = b.path("examples/is_prime.zig"),
+                    .target = wasm_target,
+                    .optimize = .ReleaseFast,
+                    .strip = true,
+                }),
+            });
+
+            is_prime.rdynamic = true;
+            is_prime.entry = .disabled;
+
+            const xxd = b.addSystemCommand(&.{ "xxd", "-i", "-n", "is_prime_wasm" });
+            xxd.step.dependOn(&is_prime.step);
+            xxd.addArtifactArg(is_prime);
+
+            const is_prime_c = xxd.addOutputFileArg("is_prime.c");
+
+            const wasmtime = b.dependency("wasmtime_macos", .{});
+
+            const example_conc_wasmtime = b.addExecutable(.{
+                .name = "example_conc_wasmtime",
+                .root_module = b.createModule(.{
+                    .target = target,
+                    .optimize = optimize,
+                    .link_libc = true,
+                }),
+            });
+
+            example_conc_wasmtime.step.dependOn(&xxd.step);
+
+            example_conc_wasmtime.root_module.addCSourceFile(.{
+                .file = b.path("examples/conc_wasmtime.c"),
+                .language = .c,
+            });
+            example_conc_wasmtime.root_module.addCSourceFile(.{
+                .file = is_prime_c,
+                .language = .c,
+            });
+            example_conc_wasmtime.root_module.addCMacro("BASIC26_STATIC", "1");
+            example_conc_wasmtime.root_module.addIncludePath(b.path("src/"));
+            example_conc_wasmtime.root_module.addIncludePath(wasmtime.path("include"));
+            example_conc_wasmtime.root_module.addLibraryPath(wasmtime.path("lib"));
+            example_conc_wasmtime.root_module.linkLibrary(basic26_static_lib);
+            example_conc_wasmtime.root_module.linkSystemLibrary("wasmtime", .{ .preferred_link_mode = .static });
+
+            b.installArtifact(example_conc_wasmtime);
+        }
     }
 }

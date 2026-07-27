@@ -1,12 +1,16 @@
 .{
     .name = .basic26,
-    .version = "1.0.0",
+    .version = "1.0.1",
     .fingerprint = 0xd2eac84aef054c5c,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .translate_c = .{
             .url = "git+https://codeberg.org/ziglang/translate-c?ref=zig-0.16.x#6fe0ffc4549f15c5f2d9432c2b4460ba90ff85ac",
             .hash = "translate_c-1.0.0-Q_BUWo_5BgD4flHdUhA31zOz0XvZk9k7lQv1ouzyNXj2",
+        },
+        .wasmtime_macos = .{
+            .url = "https://github.com/bytecodealliance/wasmtime/releases/download/v47.0.3/wasmtime-v47.0.3-aarch64-macos-c-api.tar.xz",
+            .hash = "N-V-__8AAO6N6wP2LntYA2VQW-BWinaDUP7zAxYasEdZrio7",
         },
     },
     .paths = .{

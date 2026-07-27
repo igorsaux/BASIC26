@@ -899,6 +899,10 @@ export fn basic26_Vm_get_string_id(
     return c.BASIC26_RESULT_OK;
 }
 
+export fn basic26_RegisterFunctionOptions_zeroed() callconv(.c) c.basic26_RegisterFunctionOptions {
+    return .{};
+}
+
 export fn basic26_Vm_register_function(
     c_vm: ?*c.basic26_Vm,
     options: ?*const c.basic26_RegisterFunctionOptions,
@@ -2760,7 +2764,7 @@ export fn basic26_Script_count_labels(
 
 export fn basic26_Script_dump(
     c_script: ?*const c.basic26_Script,
-    out: ?*[*]const u8,
+    out: ?*?[*]u8,
     out_len: ?*usize,
 ) callconv(.c) c.basic26_Result {
     std.debug.assert(c_script != null);
@@ -2999,7 +3003,7 @@ fn printDump(c_vm: *c.basic26_Vm, c_script: *const c.basic26_Script) !void {
 
     try expectEnum(
         c.BASIC26_RESULT_OK,
-        basic26_Script_dump(c_script, c_vm, &c_dump, &dump_len),
+        basic26_Script_dump(c_script, &c_dump, &dump_len),
     );
     defer basic26_Vm_free(c_vm, c_dump.?, dump_len, 1);
 
