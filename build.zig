@@ -129,25 +129,28 @@ pub fn build(b: *std.Build) void {
 
         b.installArtifact(example_03);
 
-        const example_conc = b.addExecutable(.{
-            .name = "example_conc",
-            .root_module = b.createModule(.{
-                .target = target,
-                .optimize = optimize,
-                .link_libc = true,
-            }),
-        });
+        // pthread
+        if (target.result.os.tag != .windows) {
+            const example_conc = b.addExecutable(.{
+                .name = "example_conc",
+                .root_module = b.createModule(.{
+                    .target = target,
+                    .optimize = optimize,
+                    .link_libc = true,
+                }),
+            });
 
-        example_conc.root_module.addCSourceFile(.{
-            .file = b.path("examples/conc.c"),
-            .language = .c,
-        });
-        example_conc.root_module.addCMacro("BASIC26_STATIC", "1");
-        example_conc.root_module.addIncludePath(b.path("src/"));
-        example_conc.root_module.linkLibrary(basic26_static_lib);
-        example_conc.root_module.linkSystemLibrary("pthread", .{});
+            example_conc.root_module.addCSourceFile(.{
+                .file = b.path("examples/conc.c"),
+                .language = .c,
+            });
+            example_conc.root_module.addCMacro("BASIC26_STATIC", "1");
+            example_conc.root_module.addIncludePath(b.path("src/"));
+            example_conc.root_module.linkLibrary(basic26_static_lib);
+            example_conc.root_module.linkSystemLibrary("pthread", .{});
 
-        b.installArtifact(example_conc);
+            b.installArtifact(example_conc);
+        }
 
         const example_startup = b.addExecutable(.{
             .name = "example_startup",
