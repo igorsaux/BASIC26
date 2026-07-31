@@ -171,7 +171,7 @@ pub fn build(b: *std.Build) void {
 
         b.installArtifact(example_startup);
 
-        if (target.result.os.tag == .macos) {
+        if (target.result.os.tag == .macos or target.result.os.tag == .linux) {
             const wasm_target = b.resolveTargetQuery(.{
                 .cpu_arch = .wasm32,
                 .os_tag = .freestanding,
@@ -196,7 +196,12 @@ pub fn build(b: *std.Build) void {
 
             const is_prime_c = xxd.addOutputFileArg("is_prime.c");
 
-            const wasmtime = b.dependency("wasmtime_macos", .{});
+            const wasmtime = b.dependency(if (target.result.os.tag == .macos)
+                "wasmtime_macos"
+            else if (target.result.os.tag == .linux)
+                "wasmtime_linux"
+            else
+                unreachable, .{});
 
             const example_conc_wasmtime = b.addExecutable(.{
                 .name = "example_conc_wasmtime",
@@ -204,6 +209,7 @@ pub fn build(b: *std.Build) void {
                     .target = target,
                     .optimize = optimize,
                     .link_libc = true,
+                    .link_libcpp = true,
                 }),
             });
 
@@ -223,6 +229,13 @@ pub fn build(b: *std.Build) void {
             example_conc_wasmtime.root_module.addLibraryPath(wasmtime.path("lib"));
             example_conc_wasmtime.root_module.linkLibrary(basic26_static_lib);
             example_conc_wasmtime.root_module.linkSystemLibrary("wasmtime", .{ .preferred_link_mode = .static });
+
+            if (target.result.os.tag == .linux) {
+                example_conc_wasmtime.root_module.linkSystemLibrary("gcc", .{});
+                example_conc_wasmtime.root_module.linkSystemLibrary("pthread", .{});
+                example_conc_wasmtime.root_module.linkSystemLibrary("dl", .{});
+                example_conc_wasmtime.root_module.linkSystemLibrary("m", .{});
+            }
 
             b.installArtifact(example_conc_wasmtime);
         }

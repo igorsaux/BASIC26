@@ -12,6 +12,10 @@
             .url = "https://github.com/bytecodealliance/wasmtime/releases/download/v47.0.3/wasmtime-v47.0.3-aarch64-macos-c-api.tar.xz",
             .hash = "N-V-__8AAO6N6wP2LntYA2VQW-BWinaDUP7zAxYasEdZrio7",
         },
+        .wasmtime_linux = .{
+            .url = "https://github.com/bytecodealliance/wasmtime/releases/download/v47.0.3/wasmtime-v47.0.3-x86_64-linux-c-api.tar.xz",
+            .hash = "N-V-__8AAMiQCAYCRRqOuGhPrIWtix8_2QexyRIermLCbLcy",
+        },
     },
     .paths = .{
         "build.zig",
