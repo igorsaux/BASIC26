@@ -34,8 +34,8 @@
 #define FIB_N 40
 #define WARMUP_ITERATIONS 50000
 #define BENCH_ITERATIONS 100000
-#define RUNS 10
-#define T_CRITICAL 2.262
+#define RUNS 100
+#define T_CRITICAL 1.99
 
 basic26_Vm *vm = NULL;
 basic26_State *state = NULL;

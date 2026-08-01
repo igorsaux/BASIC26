@@ -38,8 +38,8 @@
 #define LOOP_N 100
 #define WARMUP_ITERATIONS 20000
 #define BENCH_ITERATIONS 100000
-#define RUNS 10
-#define T_CRITICAL 2.262
+#define RUNS 100
+#define T_CRITICAL 1.99
 
 basic26_Vm *vm = NULL;
 basic26_State *state = NULL;
