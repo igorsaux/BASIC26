@@ -223,11 +223,8 @@ pub fn build(b: *std.Build) void {
                 .file = is_prime_c,
                 .language = .c,
             });
-            example_conc_wasmtime.root_module.addCMacro("BASIC26_STATIC", "1");
-            example_conc_wasmtime.root_module.addIncludePath(b.path("src/"));
             example_conc_wasmtime.root_module.addIncludePath(wasmtime.path("include"));
             example_conc_wasmtime.root_module.addLibraryPath(wasmtime.path("lib"));
-            example_conc_wasmtime.root_module.linkLibrary(basic26_static_lib);
             example_conc_wasmtime.root_module.linkSystemLibrary("wasmtime", .{ .preferred_link_mode = .static });
 
             if (target.result.os.tag == .linux) {
@@ -238,6 +235,33 @@ pub fn build(b: *std.Build) void {
             }
 
             b.installArtifact(example_conc_wasmtime);
+
+            const example_startup_wasmtime = b.addExecutable(.{
+                .name = "example_startup_wasmtime",
+                .root_module = b.createModule(.{
+                    .target = target,
+                    .optimize = optimize,
+                    .link_libc = true,
+                    .link_libcpp = true,
+                }),
+            });
+
+            example_startup_wasmtime.root_module.addCSourceFile(.{
+                .file = b.path("examples/startup_wasmtime.c"),
+                .language = .c,
+            });
+
+            example_startup_wasmtime.root_module.addIncludePath(wasmtime.path("include"));
+            example_startup_wasmtime.root_module.addLibraryPath(wasmtime.path("lib"));
+            example_startup_wasmtime.root_module.linkSystemLibrary("wasmtime", .{ .preferred_link_mode = .static });
+
+            if (target.result.os.tag == .linux) {
+                example_startup_wasmtime.root_module.linkSystemLibrary("gcc", .{});
+                example_startup_wasmtime.root_module.linkSystemLibrary("dl", .{});
+                example_startup_wasmtime.root_module.linkSystemLibrary("m", .{});
+            }
+
+            b.installArtifact(example_startup_wasmtime);
         }
     }
 }

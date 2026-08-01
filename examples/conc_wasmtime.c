@@ -195,7 +195,8 @@ int main(void) {
     if (err != NULL || trap != NULL) {
       wasm_name_t msg = {};
       wasmtime_error_message(err, &msg);
-      fprintf(stderr, "[thread %2d] instance creation failed: %s\n", i, msg.size ? msg.data : "(unknown)");
+      fprintf(stderr, "[thread %2d] instance creation failed: %s\n", i,
+              msg.size ? msg.data : "(unknown)");
       wasmtime_error_delete(err);
 
       return 1;
