@@ -79,7 +79,7 @@ static const char *SOURCE_NATIVE = "i = 0\n"
 //     one native call frame with zero callback body.
 static const char *SOURCE_NOOP = "i = 0\n"
                                  "WHILE i < n\n"
-                                 "  NOOP a\n"
+                                 "  NOOP\n"
                                  "  i = i + 1\n"
                                  "ENDWHILE\n";
 
@@ -119,10 +119,6 @@ static basic26_FunctionResult noop_function(const basic26_CallInfo *info,
   UNUSED(argv);
 
   g_native_call_count++;
-
-  if (argc != 1 || argv[0].type != BASIC26_VALUE_TYPE_INT) {
-    return BASIC26_FUNCTION_RESULT_ERROR;
-  }
 
   return BASIC26_FUNCTION_RESULT_OK;
 }
