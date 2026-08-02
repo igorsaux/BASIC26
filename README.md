@@ -1,6 +1,12 @@
 # BASIC26
 
+[![DOI](https://zenodo.org/badge/1253910322.svg)](https://doi.org/10.5281/zenodo.21762297)
+
 A lightweight, embeddable scripting language and virtual machine.
+
+The design, implementation and empirical evaluation are described in the
+accompanying paper: [Any Moment Is the Right One: Arbitrary-Point Suspension
+in Virtual Machines](https://doi.org/10.5281/zenodo.21763468).
 
 BASIC26 exposes a C API so that host applications can compile and execute any scripts at runtime. The builtin language is line-oriented, inspired by classic BASIC, and is designed for use cases such as game modding, configuration logic, automation rules, and any scenario where a small, safe, sandboxed scripting layer is desirable.
 
@@ -328,4 +334,21 @@ Marginal cost per native call (native - bytecode) / N : +1.3 ns
 Absolute cost per empty native call (noop / N)        : 29.7 ns
 Empty native call throughput                          : 33725482 calls/sec
 NADD native call throughput (incl. callback body)     : 26749039 calls/sec
+```
+
+## Citation
+
+If you use BASIC26 in research or reference it in academic work, please cite:
+
+```bibtex
+@software{basic26code,
+  author    = {Spichkin, Igor},
+  title     = {{BASIC26}},
+  month     = aug,
+  year      = 2026,
+  publisher = {Zenodo},
+  version   = {v1.0.2},
+  doi       = {10.5281/zenodo.21762298},
+  url       = {https://doi.org/10.5281/zenodo.21762298}
+}
 ```
