@@ -1745,6 +1745,7 @@ const Script = struct {
         UnknownOperator,
         ExpectedOp,
         TooManyArgs,
+        TooManyOps,
     };
 
     pub inline fn appendOp(
@@ -1752,8 +1753,13 @@ const Script = struct {
         allocator: std.mem.Allocator,
         op: c.basic26_Op,
         pos: usize,
+        limits: *const c.basic26_ScriptLimits,
         debug_info: ?*DebugInfo,
-    ) error{OutOfMemory}!void {
+    ) error{ OutOfMemory, TooManyOps }!void {
+        if (limits.max_opcodes != 0 and this.ops.items.len >= limits.max_opcodes) {
+            return error.TooManyOps;
+        }
+
         try this.ops.append(allocator, op);
         errdefer _ = this.ops.pop();
 
@@ -1996,7 +2002,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_PUSH_INT,
                         .imm = .{ .as_int = tok.kind.int },
-                    }, line_offset + tok.pos, debug_info);
+                    }, line_offset + tok.pos, limits, debug_info);
 
                     idx.* += 1;
                 },
@@ -2004,7 +2010,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_PUSH_FLOAT,
                         .imm = .{ .as_float = tok.kind.float },
-                    }, line_offset + tok.pos, debug_info);
+                    }, line_offset + tok.pos, limits, debug_info);
 
                     idx.* += 1;
                 },
@@ -2014,7 +2020,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_PUSH_STRING,
                         .imm = .{ .as_string = id },
-                    }, line_offset + tok.pos, debug_info);
+                    }, line_offset + tok.pos, limits, debug_info);
 
                     idx.* += 1;
                 },
@@ -2024,7 +2030,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_PUSH_SYMBOL,
                         .imm = .{ .as_symbol = id },
-                    }, line_offset + tok.pos, debug_info);
+                    }, line_offset + tok.pos, limits, debug_info);
 
                     idx.* += 1;
                 },
@@ -2034,7 +2040,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_PUSH_ADDRESS,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tok.pos, debug_info);
+                    }, line_offset + tok.pos, limits, debug_info);
 
                     try this.pending_jumps.append(allocator, .{
                         .op_index = jump_idx,
@@ -2050,7 +2056,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_LOAD,
                         .imm = .{ .as_symbol = id },
-                    }, line_offset + tok.pos, debug_info);
+                    }, line_offset + tok.pos, limits, debug_info);
 
                     idx.* += 1;
                 },
@@ -2067,7 +2073,7 @@ const ParserState = struct {
 
                         try script.appendOp(allocator, .{
                             .code = @intCast(info.code),
-                        }, line_offset + tok.pos, debug_info);
+                        }, line_offset + tok.pos, limits, debug_info);
                     }
 
                     if (this.op_stack.items.len == 0) {
@@ -2102,7 +2108,7 @@ const ParserState = struct {
 
                             try script.appendOp(allocator, .{
                                 .code = @intCast(popped_info.code),
-                            }, line_offset + tok.pos, debug_info);
+                            }, line_offset + tok.pos, limits, debug_info);
                         } else {
                             break;
                         }
@@ -2115,7 +2121,7 @@ const ParserState = struct {
                     if (tok.kind.keyword == .null) {
                         try script.appendOp(allocator, .{
                             .code = c.BASIC26_OPCODE_PUSH_NULL,
-                        }, line_offset + tok.pos, debug_info);
+                        }, line_offset + tok.pos, limits, debug_info);
 
                         idx.* += 1;
                     } else {
@@ -2140,7 +2146,7 @@ const ParserState = struct {
 
             try script.appendOp(allocator, .{
                 .code = @intCast(info.code),
-            }, op_str.pos, debug_info);
+            }, op_str.pos, limits, debug_info);
         }
     }
 
@@ -2174,7 +2180,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[0].pos, debug_info);
+                    }, line_offset + tokens[0].pos, limits, debug_info);
 
                     try this.ctrl_stack.append(allocator, .{
                         .if_chain = .{
@@ -2202,7 +2208,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[0].pos, debug_info);
+                    }, line_offset + tokens[0].pos, limits, debug_info);
 
                     try ctrl.if_chain.end_jumps.append(allocator, jump_end_idx);
 
@@ -2217,7 +2223,7 @@ const ParserState = struct {
                         try script.appendOp(allocator, .{
                             .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
                             .imm = .{ .as_address = 0 },
-                        }, line_offset + tokens[1].pos, debug_info);
+                        }, line_offset + tokens[1].pos, limits, debug_info);
 
                         try this.ctrl_stack.append(allocator, .{
                             .if_chain = .{
@@ -2250,7 +2256,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[0].pos, debug_info);
+                    }, line_offset + tokens[0].pos, limits, debug_info);
 
                     try ctrl.if_chain.end_jumps.append(allocator, jump_end_idx);
 
@@ -2264,7 +2270,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[0].pos, debug_info);
+                    }, line_offset + tokens[0].pos, limits, debug_info);
 
                     try this.ctrl_stack.append(allocator, .{
                         .if_chain = .{
@@ -2304,7 +2310,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP_IF_FALSE,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[0].pos, debug_info);
+                    }, line_offset + tokens[0].pos, limits, debug_info);
                     try this.ctrl_stack.append(allocator, .{ .while_stmt = .{ .start_idx = start_idx, .jump_idx = jump_idx } });
                 },
                 .endwhile => {
@@ -2319,7 +2325,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP,
                         .imm = .{ .as_address = ctrl.while_stmt.start_idx },
-                    }, line_offset + tokens[0].pos, debug_info);
+                    }, line_offset + tokens[0].pos, limits, debug_info);
 
                     script.ops.items[ctrl.while_stmt.jump_idx].imm.as_address = script.ops.items.len;
                 },
@@ -2336,7 +2342,7 @@ const ParserState = struct {
                     try script.appendOp(allocator, .{
                         .code = c.BASIC26_OPCODE_JUMP,
                         .imm = .{ .as_address = 0 },
-                    }, line_offset + tokens[i.*].pos, debug_info);
+                    }, line_offset + tokens[i.*].pos, limits, debug_info);
 
                     try this.pending_jumps.append(allocator, .{
                         .op_index = jump_idx,
@@ -2360,7 +2366,7 @@ const ParserState = struct {
                 try script.appendOp(allocator, .{
                     .code = c.BASIC26_OPCODE_STORE,
                     .imm = .{ .as_symbol = id },
-                }, line_offset + tokens[0].pos, debug_info);
+                }, line_offset + tokens[0].pos, limits, debug_info);
             } else {
                 // Function call: `ident expr, expr, ...`
                 const id = try script.parseSymbol(allocator, tokens[0].kind.ident, limits);
@@ -2388,12 +2394,12 @@ const ParserState = struct {
                 try script.appendOp(allocator, .{
                     .code = c.BASIC26_OPCODE_PUSH_INT,
                     .imm = .{ .as_int = @intCast(args_count) },
-                }, line_offset + tokens[0].pos, debug_info);
+                }, line_offset + tokens[0].pos, limits, debug_info);
 
                 try script.appendOp(allocator, .{
                     .code = c.BASIC26_OPCODE_CALL,
                     .imm = .{ .as_symbol = id },
-                }, line_offset + tokens[0].pos, debug_info);
+                }, line_offset + tokens[0].pos, limits, debug_info);
             }
         } else if (tokens[0].kind == .symbol_literal) {
             if (i.* + 1 < tokens.len) {
@@ -2405,7 +2411,7 @@ const ParserState = struct {
             try script.appendOp(allocator, .{
                 .code = c.BASIC26_OPCODE_PUSH_SYMBOL,
                 .imm = .{ .as_symbol = id },
-            }, line_offset + tokens[0].pos, debug_info);
+            }, line_offset + tokens[0].pos, limits, debug_info);
         }
     }
 };
